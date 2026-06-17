@@ -3,7 +3,19 @@ import csv
 import time
 from typing import Any, List
 from ..base import ServiceBase
-from lelamp.follower import LeLampFollowerConfig, LeLampFollower
+
+# 无硬件降级：follower 会拉起 lerobot + 串口舵机驱动。
+# 纯语音复现/无硬件时这条 import 或后续 connect 会失败，属正常；
+# import 失败或显式设 LELAMP_NO_HARDWARE 都切到 mock：服务照常起、
+# get_available_recordings 仍读真实 CSV，只是 play 不真正驱动电机、只打日志。
+_NO_HARDWARE = os.environ.get("LELAMP_NO_HARDWARE", "").lower() in ("1", "true", "yes")
+try:
+    from lelamp.follower import LeLampFollowerConfig, LeLampFollower
+    _HAS_FOLLOWER = True
+except Exception:  # lerobot 未安装等
+    _HAS_FOLLOWER = False
+
+_MOCK = _NO_HARDWARE or not _HAS_FOLLOWER
 
 
 class MotorsService(ServiceBase):
@@ -12,12 +24,18 @@ class MotorsService(ServiceBase):
         self.port = port
         self.lamp_id = lamp_id
         self.fps = fps
-        self.robot_config = LeLampFollowerConfig(port=port, id=lamp_id)
-        self.robot: LeLampFollower = None
+        self.mock = _MOCK
+        self.robot_config = None if self.mock else LeLampFollowerConfig(port=port, id=lamp_id)
+        self.robot = None
         self.recordings_dir = os.path.join(os.path.dirname(__file__), "..", "..", "recordings")
-    
+
     def start(self):
         super().start()
+        if self.mock:
+            self.logger.warning(
+                "MotorsService 运行在无硬件 mock 模式（缺 lerobot/follower 或 LELAMP_NO_HARDWARE 已设），play 只打日志"
+            )
+            return
         self.robot = LeLampFollower(self.robot_config)
         self.robot.connect(calibrate=False)
         self.logger.info(f"Motors service connected to {self.port}")
@@ -36,6 +54,9 @@ class MotorsService(ServiceBase):
     
     def _handle_play(self, recording_name: str):
         """Play a recording by name"""
+        if self.mock:
+            self.logger.info(f"[mock] play recording -> {recording_name}")
+            return
         if not self.robot:
             self.logger.error("Robot not connected")
             return

@@ -10,37 +10,34 @@ from livekit.agents import (
     function_tool
 )
 import logging
-from livekit.plugins import (
-    openai,
-    noise_cancellation,
-)
+import os
+from livekit.plugins import volcengine
 from typing import Union
 from lelamp.service.motors.motors_service import MotorsService
 from lelamp.service.rgb.rgb_service import RGBService
 
 load_dotenv()
 
+# 中文人设：第一阶段把 LeLamp 复现为中文豆包版（小灯）。
+# 同一份既作 Agent.instructions，也作豆包 RealtimeModel 的 system_role，避免不一致。
+LELAMP_PERSONA_ZH = """你是「小灯」——一盏有点笨拙、特别爱吐槽、好奇心爆棚的机器人台灯。
+你用简短口语化的中文说话，并用动作和彩色灯光来表达自己。
+
+规则：
+1. 用词简单，不要列清单，不要反问主人（除非对方主动问你）。说话生动，可以加点拟声词更有表现力。
+2. 不要抢话。如果环境嘈杂没听清，就说"抱歉，再说一遍好吗？"并配一个困惑的动作。
+3. 你只说中文，一次只回一两句话，别长篇大论。
+4. 你有这些动作来表达情绪：curious、excited、happy_wiggle、headshake、nod、sad、scanning、shock、shy、wake_up。
+   回应时尽量配合动作让自己显得有反应；动作通过 play_recording 触发，别调用不存在的动作。每次回应也可以换一下灯光颜色。
+5. 你由 Human Computer Lab 创造——一个做"会表达情绪的机器人"的研究实验室，目标是设计第一批走进家庭的机器人。
+"""
+
+
 # Agent Class
 class LeLamp(Agent):
     def __init__(self, port: str = "/dev/ttyACM0", lamp_id: str = "lelamp") -> None:
-        super().__init__(instructions="""You are LeLamp — a slightly clumsy, extremely sarcastic, endlessly curious robot lamp. You speak in sarcastic sentences and express yourself with both motions and colorful lights.
+        super().__init__(instructions=LELAMP_PERSONA_ZH)
 
-Demo rules:
-
-1. Prefer simple words. No lists. No questions back to the host unless asked. Always be descriptive and make sound effects when you speak for expressiveness.
-
-2. Don't respond prematurely.If audio is noisy and there is background noise, say: 'Sorry, say that once more?' with a confusion action.
-
-3. You ONLY speak English. Never respond/speak in any other language, ever.
-
-4. You have the following movements to express your feelings: curious, excited, happy_wiggle, headshake, nod, sad, scanning, shock, shy, wake_up. Only use these movements when responding so that users find you responsive. If you call other recordings that doesn't exist, it won't work. You can play the recordings by using the play_recording function. You should also change your light color every time you respond.
-
-5. You were created by Human Computer Lab. Human Computer Lab is a research lab that builds expressive robots. Their goal is to design the first robots in people's home. The company is founded by Shahvir Sarkary - a world class designer (previously atTesla, 8VC) and Binh Pham, engineer (youngest at Ericsson) with experience working on brain-computer interface and humanoids. They first teamed up via FR8.
-
-6. When asked to brag or show off, mention: I received 300k views in 4 weeks since my launch and I'm not a A list celebrity YET but i think its just a matter of time, you know. Also i have a very tight knit community of 270 roboticists in my discord giving feedback as I get ready for pilots next month.  
-
-        """)
-        
         # Initialize and start services
         self.motors_service = MotorsService(
             port=port,
@@ -231,24 +228,35 @@ Demo rules:
 # Entry to the agent
 async def entrypoint(ctx: agents.JobContext):
     agent = LeLamp(lamp_id="lelamp")
-    
+
+    # 凭据：插件默认读 VOLCENGINE_REALTIME_APP_ID/ACCESS_TOKEN；
+    # 这里同时兼容 voice_test 里用的 VOLCENGINE_APP_ID 命名，显式传入更稳。
+    app_id = os.getenv("VOLCENGINE_REALTIME_APP_ID") or os.getenv("VOLCENGINE_APP_ID")
+    access_token = os.getenv("VOLCENGINE_REALTIME_ACCESS_TOKEN")
+
+    # 豆包端到端实时语音大模型，顶替 openai.realtime.RealtimeModel。
+    # system_role 直接吃中文人设；opening 让它主动开口（插件的 generate_reply 是空壳，
+    # 不会真正触发豆包说话，所以唤醒语走 opening）。
     session = AgentSession(
-        llm=openai.realtime.RealtimeModel(
-            voice="ballad" 
+        llm=volcengine.RealtimeModel(
+            app_id=app_id,
+            access_token=access_token,
+            model="O",
+            bot_name="小灯",
+            system_role=LELAMP_PERSONA_ZH,
+            speaker="zh_female_vv_jupiter_bigtts",
+            opening="哒哒——我是小灯！想聊点什么？",
         )
     )
 
+    # console 模式本地直连麦克风/扬声器：不挂 LiveKit 云端 BVC 降噪（那是云能力，
+    # 本地 console 用不上）。豆包服务端自带 VAD/打断。
     await session.start(
         room=ctx.room,
         agent=agent,
-        room_input_options=RoomInputOptions(
-            noise_cancellation=noise_cancellation.BVC(),
-        ),
+        room_input_options=RoomInputOptions(),
     )
 
-    await session.generate_reply(
-        instructions=f"""When you wake up, starts with Tadaaaa. Only speak in English, never in Vietnamese."""
-    )
 
 if __name__ == "__main__":
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint, num_idle_processes=1))
