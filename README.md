@@ -2,6 +2,17 @@
 
 ![](./assets/images/Banner.png)
 
+> **Fork 说明 / Attribution**
+> 本仓库 fork 自 [humancomputerlab/lelamp_runtime](https://github.com/humancomputerlab/lelamp_runtime)，
+> 原项目 [LeLamp](https://github.com/humancomputerlab/LeLamp) 由 [Human Computer Lab](https://www.humancomputerlab.com/) 开发，遵循 **GNU GPL-3.0**。
+> 本 fork 延续 GPL-3.0（见 [LICENSE](./LICENSE)）。
+>
+> **本 fork 相对上游的改动（GPL §5 要求注明修改）：**
+> - 语音后端从 OpenAI Realtime 替换为**豆包端到端实时语音大模型**（`livekit-plugins-volcengine` 的 `RealtimeModel`）。
+> - 新增**无硬件运行**支持：`MotorsService`/`RGBService` 在缺硬件库或设 `LELAMP_NO_HARDWARE=1` 时降级为 mock（只打日志，不碰串口/GPIO），便于在 PC 上做纯语音复现。
+> - 人设中文化（小灯）；锁定 `livekit-agents==1.2.9`；硬件依赖移入 `pyproject` 的可选 `hardware`。
+> - 新增 `tools/smoke_doubao.py`：不开麦的连接/首音延迟冒烟。
+
 This repository holds the code for controlling LeLamp. The runtime provides a comprehensive control system for the robotic lamp, including motor control, recording/replay functionality, voice interaction, and testing capabilities.
 
 [LeLamp](https://github.com/humancomputerlab/LeLamp) is an open source robot lamp based on [Apple's Elegnt](https://machinelearning.apple.com/research/elegnt-expressive-functional-movement), made by [[Human Computer Lab]](https://www.humancomputerlab.com/)
@@ -312,4 +323,6 @@ See [SPONSORS.md](./SPONSORS.md) for sponsor thanks and how to support the proje
 
 ## License
 
-Check the main [LeLamp repository](https://github.com/humancomputerlab/LeLamp) for licensing information.
+本项目遵循 **GNU General Public License v3.0**（GPL-3.0），与上游 [LeLamp](https://github.com/humancomputerlab/LeLamp) 一致。完整条款见 [LICENSE](./LICENSE)。
+
+GPL-3.0 是传染性 copyleft：你可以自由使用、修改、再分发本代码，但衍生作品在分发时必须同样以 GPL-3.0 开源并提供源码、保留版权与署名、注明所做修改。
