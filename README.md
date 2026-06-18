@@ -286,23 +286,36 @@ Sample apps to test LeLamp's capabilities.
 
 ### LiveKit Voice Agent
 
-本 fork 用**豆包端到端实时语音**，运行前在仓库根目录建 `.env`：
+本 fork 支持两种语音模式，用环境变量 `LELAMP_VOICE_MODE` 切换（默认 `realtime`）：
+
+| 模式 | 说明 | 适用 |
+|---|---|---|
+| `realtime`（默认） | 豆包端到端实时语音，单模型单 key，延迟低 | 日常对话、演示 |
+| `cascaded` | STT + LLM + TTS 三段式（纯豆包） | 测试：工具调用稳、每段延迟可单独量、组件可换 |
+
+console 本地模式直连麦克风/扬声器，**不需要** LiveKit 云端密钥。在仓库根目录建 `.env`：
 
 ```bash
-# 豆包 / 火山引擎实时语音（main.py 读取）
+# ---- realtime 模式（默认）----
 VOLCENGINE_REALTIME_APP_ID=
 VOLCENGINE_REALTIME_ACCESS_TOKEN=
+
+# ---- cascaded 模式（三段式，凭据分三套，旧版双参 + Ark 单 key 不可混用）----
+VOLCENGINE_APP_ID=                 # STT/TTS 共用的应用 ID
+VOLCENGINE_STT_ACCESS_TOKEN=       # STT（BigModelSTT）
+VOLCENGINE_LLM_API_KEY=            # LLM（Ark，OpenAI 兼容）
+VOLCENGINE_TTS_ACCESS_TOKEN=       # TTS
+# 可选：VOLCENGINE_LLM_MODEL / VOLCENGINE_TTS_CLUSTER / VOLCENGINE_TTS_VOICE
 ```
 
-> 凭据说明：插件默认读 `VOLCENGINE_REALTIME_APP_ID` / `VOLCENGINE_REALTIME_ACCESS_TOKEN`；
-> `main.py` 也兼容 `VOLCENGINE_APP_ID` 命名。注意新版单 key 与旧版双参不可混用。
-
-console 本地模式直连麦克风/扬声器，**不需要** LiveKit 云端密钥。运行：
+运行：
 
 ```bash
-# Pick one of the below
-# 离散动画模式（默认）
+# realtime（默认）
 sudo uv run main.py console
+
+# cascaded（三段式）
+LELAMP_VOICE_MODE=cascaded sudo uv run main.py console
 
 # 平滑动画模式
 sudo uv run smooth_animation.py console
@@ -310,6 +323,7 @@ sudo uv run smooth_animation.py console
 
 无硬件（PC 上纯语音复现）时设 `LELAMP_NO_HARDWARE=1`，电机/灯光降级为 mock 只打日志。
 连接/首音延迟冒烟（不开麦）：`uv run tools/smoke_doubao.py`。
+cascaded 模式想要更稳的断句/打断，可装 `livekit-plugins-silero`（装了自动启用 VAD，否则靠 BigModelSTT 自带 VAD）。
 
 In case your lamp is not `lelamp`, change the id of the lamp inside main.py:
 

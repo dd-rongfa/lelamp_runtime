@@ -30,6 +30,18 @@
 主程序通过 `dispatch(event_type, payload, priority)` 投递事件，线程间互不阻塞。
 大模型通过 `@function_tool` 间接调用这些 `dispatch`。
 
+### 语音大脑：两种可切换模式
+
+由环境变量 `LELAMP_VOICE_MODE` 选择（默认 `realtime`），`main.py` 据此装配不同 `AgentSession`：
+
+| 模式 | 组成 | 特点 | 适用 |
+|---|---|---|---|
+| `realtime`（默认） | `volcengine.RealtimeModel` 单模型 | 端到端、延迟低、单 key；`generate_reply` 为空壳，开场靠 `opening`，工具调用偏弱 | 日常对话、演示 |
+| `cascaded` | `BigModelSTT` + `volcengine.LLM`(Ark) + `volcengine.TTS` | 每段可单独测延迟、组件可换、工具调用走 OpenAI 兼容稳定、`generate_reply` 真可用 | 测试、复现、调试三瓶颈 |
+
+`cascaded` 断句默认用 `BigModelSTT` 自带服务端 VAD；装了 `livekit-plugins-silero` 则自动接 `vad=` 更稳。
+两模式共用同一套 `LeLamp` Agent 与 4 个 `@function_tool`，只换"听+想+说"的实现。
+
 ## 2. 交互范式：常开免唤醒
 
 - 进程启动后 `session.start()` 即常驻，麦克风全程开启。

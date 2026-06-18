@@ -225,19 +225,23 @@ class LeLamp(Agent):
             print(result)
             return result
 
-# Entry to the agent
-async def entrypoint(ctx: agents.JobContext):
-    agent = LeLamp(lamp_id="lelamp")
+# 语音模式开关：
+#   realtime（默认）—— 豆包端到端实时语音，单模型，单 key，行为同既往。
+#   cascaded        —— STT + LLM + TTS 三段式，便于单独测每段、稳定走工具调用、随意换组件。
+# 通过环境变量 LELAMP_VOICE_MODE 选择，避免改代码。
+VOICE_MODE = os.getenv("LELAMP_VOICE_MODE", "realtime").strip().lower()
 
+
+def _build_realtime_session() -> AgentSession:
+    """豆包端到端实时语音，顶替 openai.realtime.RealtimeModel。"""
     # 凭据：插件默认读 VOLCENGINE_REALTIME_APP_ID/ACCESS_TOKEN；
     # 这里同时兼容 voice_test 里用的 VOLCENGINE_APP_ID 命名，显式传入更稳。
     app_id = os.getenv("VOLCENGINE_REALTIME_APP_ID") or os.getenv("VOLCENGINE_APP_ID")
     access_token = os.getenv("VOLCENGINE_REALTIME_ACCESS_TOKEN")
 
-    # 豆包端到端实时语音大模型，顶替 openai.realtime.RealtimeModel。
     # system_role 直接吃中文人设；opening 让它主动开口（插件的 generate_reply 是空壳，
     # 不会真正触发豆包说话，所以唤醒语走 opening）。
-    session = AgentSession(
+    return AgentSession(
         llm=volcengine.RealtimeModel(
             app_id=app_id,
             access_token=access_token,
@@ -249,6 +253,56 @@ async def entrypoint(ctx: agents.JobContext):
         )
     )
 
+
+def _build_cascaded_session() -> AgentSession:
+    """STT + LLM + TTS 三段式（纯豆包）。
+
+    - STT：BigModelSTT，自带服务端 VAD 断句，无需 silero（要更准可装 livekit-plugins-silero 接 vad=）。
+    - LLM：volcengine.LLM 走 Ark OpenAI 兼容，function_tool 工具调用原生可用。
+    - TTS：volcengine.TTS。
+    人设走 Agent.instructions（已在 LeLamp 里设），LLM 自动吃；开场用 generate_reply 真合成。
+    凭据分三套（旧版双参 + Ark 单 key 不可混用），缺哪套插件会直接报错提示。
+    """
+    app_id = os.getenv("VOLCENGINE_APP_ID") or os.getenv("VOLCENGINE_REALTIME_APP_ID")
+
+    stt = volcengine.BigModelSTT(
+        app_id=app_id,
+        # access_token 缺省读 VOLCENGINE_STT_ACCESS_TOKEN
+    )
+    llm = volcengine.LLM(
+        model=os.getenv("VOLCENGINE_LLM_MODEL", "doubao-1-5-lite-32k-250115"),
+        # api_key 缺省读 VOLCENGINE_LLM_API_KEY
+    )
+    tts = volcengine.TTS(
+        app_id=app_id,
+        cluster=os.getenv("VOLCENGINE_TTS_CLUSTER", "volcano_tts"),
+        voice=os.getenv("VOLCENGINE_TTS_VOICE", "zh_female_vv_jupiter_bigtts"),
+        # access_token 缺省读 VOLCENGINE_TTS_ACCESS_TOKEN
+    )
+
+    # 可选 silero VAD：装了就用，更稳的断句/打断；没装就靠 BigModelSTT 自带 VAD。
+    vad = None
+    try:
+        from livekit.plugins import silero
+
+        vad = silero.VAD.load()
+    except Exception:
+        pass
+
+    return AgentSession(stt=stt, llm=llm, tts=tts, vad=vad)
+
+
+# Entry to the agent
+async def entrypoint(ctx: agents.JobContext):
+    agent = LeLamp(lamp_id="lelamp")
+
+    if VOICE_MODE == "cascaded":
+        logging.info("语音模式：cascaded（STT+LLM+TTS 三段式）")
+        session = _build_cascaded_session()
+    else:
+        logging.info("语音模式：realtime（豆包端到端）")
+        session = _build_realtime_session()
+
     # console 模式本地直连麦克风/扬声器：不挂 LiveKit 云端 BVC 降噪（那是云能力，
     # 本地 console 用不上）。豆包服务端自带 VAD/打断。
     await session.start(
@@ -256,6 +310,12 @@ async def entrypoint(ctx: agents.JobContext):
         agent=agent,
         room_input_options=RoomInputOptions(),
     )
+
+    # 三段式下 generate_reply 真能触发合成，让小灯主动开口；realtime 走 opening，不需要。
+    if VOICE_MODE == "cascaded":
+        await session.generate_reply(
+            instructions="用一句话主动打招呼，就说：哒哒——我是小灯！想聊点什么？"
+        )
 
 
 if __name__ == "__main__":
