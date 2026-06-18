@@ -317,7 +317,8 @@ sudo uv run smooth_animation.py console
 ```
 
 无硬件（PC 上纯语音复现）时设 `LELAMP_NO_HARDWARE=1`，电机/灯光降级为 mock 只打日志。
-断句/打断用本地 **silero VAD**（已是基础依赖，`uv sync` 自动装）——比纯靠 STT 服务端 VAD 跟手得多。
+断句用 volc_v3.STT 的**服务端 VAD**。（曾试加本地 silero VAD 提速，但会与服务端 VAD 双重断句、
+导致回复重复，已回退；后续要上 silero 须配 turn_detection 让二者只有一个做端点。）
 
 In case your lamp is not `lelamp`, change the id of the lamp inside main.py:
 

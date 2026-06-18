@@ -364,17 +364,11 @@ def _build_session() -> AgentSession:
         llm = openai.LLM(model=model, client=client)
     tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
 
-    # 本地 silero VAD 做断句/打断（基础依赖，比 STT 服务端 VAD 跟手得多，是对话不卡的关键）。
-    # 留 try 兜底：万一模型下载失败也别崩，退回服务端 VAD。
-    vad = None
-    try:
-        from livekit.plugins import silero
-
-        vad = silero.VAD.load()
-    except Exception:
-        pass
-
-    return AgentSession(stt=stt, llm=llm, tts=tts, vad=vad)
+    # 断句只用 volc_v3.STT 的服务端 VAD（vad=None）。
+    # 教训：再叠一个 silero 本地 VAD 会与 STT 服务端 VAD「双重断句」——
+    # 一轮话被切两次、重复触发回复 → TTS 重复说话。要上 silero 必须同时配
+    # turn_detection 让两者只有一个做端点，并联机实测确认不重复，再开。
+    return AgentSession(stt=stt, llm=llm, tts=tts, vad=None)
 
 
 # Entry to the agent
