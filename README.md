@@ -96,65 +96,30 @@ lelamp_runtime/
 └── uv.lock                 # 依赖锁
 ```
 
-## Installation
+## 安装（真机 / 硬件）
 
-### Prerequisites
-
-- UV package manager
-- Hardware components properly assembled (see main LeLamp documentation)
-
-### Setup
-
-1. Clone the runtime repository:
+> 只想无硬件体验语音+视觉+工具？看上面的 [快速开始](#快速开始无硬件windows--macos--ubuntu-都行) 就够了。
+> 本节是给接了树莓派 / 机械臂的人。
 
 ```bash
 git clone https://github.com/dd-rongfa/lelamp_runtime.git
 cd lelamp_runtime
+uv sync                    # 纯软件（语音/视觉/工具），任何电脑都行
+uv sync --extra hardware   # 接了舵机/LED 的树莓派再加这个
 ```
 
-2. Install UV (if not already installed):
+装得慢或 LFS 报错：`GIT_LFS_SKIP_SMUDGE=1 uv sync`、`export UV_CONCURRENT_DOWNLOADS=1`。
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+**依赖分两层（这也回答了"到底要什么"）：**
+- **软件核心**（`uv sync` 就装）：`livekit-agents[openai]`（框架 + 官方 OpenAI SDK 接方舟 Ark）、
+  自写 `lelamp/voice/volc_v3`（STT/TTS，无额外包）、`numpy`、`sounddevice`、`python-dotenv`。
+- **硬件专用**（`--extra hardware` 才装）：`feetech-servo-sdk`、`lerobot`（机械臂）、
+  `rpi-ws281x` / `neopixel`（LED）、`pyaudio`。**无机械臂时完全不需要。**
 
-3. Install dependencies:
+> API 只需两把火山 key：`VOLCENGINE_VOICE_API_KEY`（语音）+ `LLM_API_KEY`（方舟 Ark，含视觉）。
+> 不需要 OpenAI 账号、不需要 LiveKit 云密钥。
 
-```bash
-# If on your personal computer
-uv sync
-
-# If on Raspberry Pi
-uv sync --extra hardware
-```
-
-**Note**: For motor setup and control, LeLamp Runtime can run on your computer and you only need to run `uv sync`. For other functionality that connects to the head Pi (LED control, audio, camera), you need to install LeLamp Runtime on that Pi and run `uv sync --extra hardware`.
-
-If you have LFS problems, run the following command:
-
-```bash
-GIT_LFS_SKIP_SMUDGE=1 uv sync
-```
-
-If your installation process is slow, use the following environment variable:
-
-```bash
-export UV_CONCURRENT_DOWNLOADS=1
-```
-
-### Dependencies
-
-The runtime includes several key dependencies:
-
-- **feetech-servo-sdk**: For servo motor control
-- **lerobot**: Robotics framework integration
-- **livekit-agents**: Real-time voice interaction
-- **numpy**: Mathematical operations
-- **sounddevice**: Audio input/output
-- **adafruit-circuitpython-neopixel**: RGB LED control (hardware)
-- **rpi-ws281x**: Raspberry Pi LED control (hardware)
-
-## Core Functionality
+## 硬件操作（真机：标定 / 录制 / 回放）
 
 Prior to following the instructions here, you should have an overview of how to control LeLamp through [this tutorial](https://github.com/humancomputerlab/LeLamp/blob/master/docs/5.%20LeLamp%20Control.md).
 
