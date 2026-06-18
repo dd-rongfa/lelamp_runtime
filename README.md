@@ -10,7 +10,7 @@
 > **本 fork 相对上游的改动（GPL §5 要求注明修改）：**
 > - 语音后端从 OpenAI Realtime 改为**火山豆包新版统一 API 的 STT + LLM + TTS 三段式**：STT/TTS 用本仓库自写插件 `lelamp/voice/volc_v3`（v3 单 X-Api-Key），LLM 走方舟 Ark；工具调用可用。
 > - 新增**无硬件运行**支持：`MotorsService`/`RGBService` 在缺硬件库或设 `LELAMP_NO_HARDWARE=1` 时降级为 mock（只打日志，不碰串口/GPIO），便于在 PC 上做纯语音复现。
-> - 人设中文化（小灯）；保持 `livekit-agents==1.2.9` 版本锁不变；硬件依赖移入 `pyproject` 的可选 `hardware`。
+> - 人设中文化（小灯）；锁 `livekit-agents==1.5.17`（对齐 voice_test 验证版本）；硬件依赖移入 `pyproject` 的可选 `hardware`。
 > - 新增 `tools/smoke_doubao.py`：不开麦的连接/首音延迟冒烟。
 
 本仓库是「小灯」——把上游 [LeLamp](https://github.com/humancomputerlab/LeLamp)（基于 [Apple Elegnt](https://machinelearning.apple.com/research/elegnt-expressive-functional-movement) 的开源机器人台灯，由 [Human Computer Lab](https://www.humancomputerlab.com/) 开发）复现为**中文豆包三段式语音版**的运行时代码。提供电机控制、动作录制/回放、语音对话（工具可用）、RGB 灯光与硬件自检能力。
@@ -294,7 +294,7 @@ Sample apps to test LeLamp's capabilities.
 | TTS | `lelamp/voice/volc_v3`（自写） | 火山新版 v3「单 X-Api-Key」，按音色自动选 resource_id |
 
 > `volc_v3` 是**本仓库自写插件**（自包含 WS/HTTP 协议，移植自 voice_test），不依赖旧 volcengine 插件的 STT/TTS。
-> 它对应 livekit-agents 1.5.x 写成，但实测在本仓库锁定的 **1.2.9** 上原样可用——**故本仓库不改 livekit 版本**。
+> 它对应 livekit-agents **1.5.x**，本仓库即锁 1.5.17（与 voice_test 一致）。
 > 旧的 `volcengine.RealtimeModel`（端到端实时、旧 API、不支持工具）已**弃用移除**。
 
 console 本地模式直连麦克风/扬声器，**不需要** LiveKit 云端密钥。在仓库根目录建 `.env`：
@@ -317,8 +317,8 @@ sudo uv run smooth_animation.py console
 ```
 
 无硬件（PC 上纯语音复现）时设 `LELAMP_NO_HARDWARE=1`，电机/灯光降级为 mock 只打日志。
-断句用 volc_v3.STT 的**服务端 VAD**。（曾试加本地 silero VAD 提速，但会与服务端 VAD 双重断句、
-导致回复重复，已回退；后续要上 silero 须配 turn_detection 让二者只有一个做端点。）
+断句/打断用本地 **silero VAD**（基础依赖，`uv sync` 自动装）——本地端点比 STT 服务端 VAD 跟手。
+（注：1.5.x 的 turn-handling 会与 volc_v3.STT 协调，不会双重触发；早期在 1.2.9 上叠 silero 曾导致回复重复，升级到 1.5.17 后解决。）
 
 In case your lamp is not `lelamp`, change the id of the lamp inside main.py:
 

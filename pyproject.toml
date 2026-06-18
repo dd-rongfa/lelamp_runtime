@@ -5,12 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 # 第一阶段复现（无硬件纯语音）：火山豆包新版统一 API 的 STT+LLM+TTS 三段式。
-# - STT/TTS：本仓库自写插件 lelamp/voice/volc_v3（只依赖 livekit-agents 基类，无需额外插件包）。
-# - LLM：openai 插件接方舟 Ark（OpenAI 兼容），即原版的 livekit-agents[openai]，故沿用该 extra。
-# 已弃用旧的 livekit-plugins-volcengine（其 RealtimeModel 旧 API 已移除）。版本锁仍固定 1.2.9。
+# - STT/TTS：本仓库自写插件 lelamp/voice/volc_v3（对应 livekit-agents 1.5.x，只依赖其基类）。
+# - LLM：openai 插件接方舟 Ark（OpenAI 兼容），即原版的 livekit-agents[openai]。
+# - VAD：silero 本地断句（1.5.x 的 turn-handling 与 STT 服务端 VAD 协调好，不重复触发）。
+# 锁 1.5.17 = 对齐 voice_test 已验证的版本（旧 1.2.9 锁是 volcengine 插件遗留，该插件已移除）。
 # 电机/LED 等硬件依赖（lerobot/feetech/rpi）挪到 optional，避免无硬件环境安装。
 dependencies = [
-    "livekit-agents[openai]==1.2.9",
+    "livekit-agents[openai]==1.5.17",
+    "livekit-plugins-silero",          # 本地 VAD 断句（1.5.x 上与 STT 协调正常）
     "numpy>=2.2.6",
     "python-dotenv",
     "sounddevice>=0.5.2",

@@ -41,13 +41,13 @@
 | TTS | `volc_v3.TTS` | 火山新版 v3「单 X-Api-Key」，按音色自动选 resource_id |
 
 STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（自包含 WS/HTTP 协议，移植自 voice_test，
-不依赖旧 volcengine 插件的 STT/TTS）。该插件按 1.5.x 写成，但**实测在本仓库锁定的 livekit-agents 1.2.9 上原样可构造**
-——因为豆包协议与 livekit 版本无关，插件只是把协议包成 `stt.STT`/`tts.TTS` 基类，而这些基类在 1.2.9 已具备。
-**故本仓库不改版本锁，零依赖升级风险。**
+不依赖旧 volcengine 插件的 STT/TTS）。该插件按 **livekit-agents 1.5.x** 写成，本仓库即锁 1.5.17（与 voice_test 一致）。
+> 历史：早期为省事曾锁在 1.2.9（volcengine 插件遗留）并把 volc_v3 硬塞上去，但 1.2.9 老 turn-handling 在叠 silero VAD 时会导致 TTS 重复；
+> 该插件已移除、1.2.9 锁已无意义，故升到 1.5.17——回到 volc_v3 的亲妈版本，silero 也正常了。
 
 断句用 `volc_v3.STT` 的**服务端 VAD**（`end_window_size` 等参数控制）。
-> 注：曾加本地 silero VAD 想提升跟手度，但它与 STT 服务端 VAD「双重断句」——一轮被切两次、
-> 重复触发回复导致 TTS 重复，已回退。后续要上 silero，须同时设 `turn_detection` 让两者只有一个做端点，并联机实测。
+断句/打断用本地 **silero VAD**（`livekit-plugins-silero`，基础依赖）——本地端点比 STT 服务端 VAD 跟手。
+> 1.5.x 的 turn-handling 会与 volc_v3.STT 协调，不双重触发（早期 1.2.9 上叠 silero 会导致 TTS 重复，升级后解决）。
 
 > **已弃用移除**：旧的 `volcengine.RealtimeModel`（豆包端到端实时，旧 API、`generate_reply` 空壳、不支持工具调用）。
 > 当前只保留新版统一 API 的三段式通路。

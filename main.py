@@ -5,41 +5,19 @@ import subprocess
 
 from livekit import agents, api, rtc
 from livekit.agents import (
-    AgentSession, 
-    Agent, 
-    RoomInputOptions,
-    function_tool
+    AgentSession,
+    Agent,
+    function_tool,
 )
 import logging
 import os
-import openai as openai_sdk  # 官方 OpenAI SDK：豆包全系列支持 OpenAI 格式，直接拿它建客户端
+import openai as openai_sdk  # 官方 OpenAI SDK：_vision_describe 直连方舟看图用
 from livekit.plugins import openai
-from livekit.agents.types import NOT_GIVEN
+from livekit.plugins import silero  # 本地 VAD 断句；必须在主线程 import 完成插件注册
 from typing import Union
 from lelamp.service.motors.motors_service import MotorsService
 from lelamp.service.rgb.rgb_service import RGBService
 from lelamp.voice import volc_v3  # 本仓库自写的火山 v3 单 key STT/TTS（三段式用）
-
-
-class ArkLLM(openai.LLM):
-    """方舟 Ark LLM：默认关掉豆包 Seed 系列的「思考」(thinking)。
-
-    Seed-2.0 全模态默认开思维链，首字延迟实测 7~12s，对语音台灯不可用；
-    关掉后 TTFT 降到 ~1s。小灯只说一两句口语，不需要 chain-of-thought。
-    AgentSession 内部自行调 chat()，故在此把 thinking 注入到每次请求的 extra_body。
-    设 LLM_THINKING=enabled/auto 可恢复。
-    """
-
-    def __init__(self, *args, thinking: str = "disabled", **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self._thinking = thinking
-
-    def chat(self, *, extra_kwargs=NOT_GIVEN, **kwargs):
-        merged = dict(extra_kwargs) if isinstance(extra_kwargs, dict) else {}
-        body = dict(merged.get("extra_body") or {})
-        body.setdefault("thinking", {"type": self._thinking})
-        merged["extra_body"] = body
-        return super().chat(extra_kwargs=merged, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -330,13 +308,12 @@ def _build_session() -> AgentSession:
     """STT + LLM + TTS 三段式（本仓库唯一语音通路，全部走火山新版统一 API）。
 
     语音 I/O 用本仓库自写插件 lelamp.voice.volc_v3（火山新版 v3「单 X-Api-Key」统一接口，
-    自包含 WS/HTTP 协议，不依赖旧 volcengine 插件的 STT/TTS；已在 livekit-agents 1.2.9 实测可构造）。
-    - STT：volc_v3.STT（seedasr 2.0）；断句用本地 silero VAD（基础依赖，跟手）。
-    - LLM：方舟 Ark chat（OpenAI 兼容，新版 API），function_tool 工具调用可用。
+    自包含 WS/HTTP 协议，对应 livekit-agents 1.5.x）。
+    - STT：volc_v3.STT（seedasr 2.0）；断句用本地 silero VAD（1.5.x 与 STT 协调好，不重复）。
+    - LLM：方舟 Ark chat（OpenAI 兼容），function_tool 工具调用可用。豆包 Seed 默认开思考
+      TTFT 7~12s，靠构造参数 extra_body thinking=disabled 关掉 → ~1s（1.5.x 的 openai.LLM 直接支持）。
     - TTS：volc_v3.TTS（按音色自动选 resource_id）。
     人设走 Agent.instructions（已在 LeLamp 里设），LLM 自动吃；开场用 generate_reply 真合成。
-
-    注：旧的 volcengine.RealtimeModel（端到端实时，旧 API、不支持工具）已弃用移除。
     """
     # STT/TTS 共用一把新版 v3 单 key（与 voice_test 同名，方便复用同一份凭据）。
     voice_key = os.getenv("VOLCENGINE_VOICE_API_KEY")
@@ -344,31 +321,24 @@ def _build_session() -> AgentSession:
         raise RuntimeError(
             "缺 VOLCENGINE_VOICE_API_KEY（volc_v3 STT/TTS 的新版 v3 单 X-Api-Key）"
         )
-    speaker = os.getenv("LAMP_SPEAKER", "zh_female_vv_uranus_bigtts")  # Vivi 2.0；与新版 v3 单 key 配套（jupiter 会报 55000000 resource 不匹配）
+    speaker = os.getenv("LAMP_SPEAKER", "zh_female_vv_uranus_bigtts")  # Vivi 2.0；jupiter 会报 55000000 resource 不匹配
 
     stt = volc_v3.STT(api_key=voice_key)
-    # LLM 用 openai 插件接方舟 Ark（OpenAI 兼容，新版 chat API，支持 function_tool）。
-    # 默认 Doubao-Seed-2.0-lite：全模态（音视图文统一理解），一个脑同时管聊天和看图，
-    # 后续「看作业」等视觉能力可直接复用这颗脑，不必另接 VLM。
-    # 与原版 livekit-agents[openai] 一致；换 DeepSeek 等其它 OpenAI 兼容端点只需改 base_url/key。
+    tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
+
+    # LLM：openai 插件接方舟 Ark。默认 Doubao-Seed-2.0-lite 全模态（聊天+看图一颗脑）。
+    # 换 DeepSeek 等其它 OpenAI 兼容端点只需改 LLM_MODEL/LLM_BASE_URL。
     model = os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428")
     base_url = os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/")
     api_key = os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY")
-    # 豆包全系列支持 OpenAI 格式：用官方 openai SDK 直接建 AsyncClient 指向方舟端点，
-    # 再交给 livekit 的 LLM 节点（AgentSession 需要这层壳）。换任意豆包/兼容模型只改 LLM_MODEL/LLM_BASE_URL。
-    client = openai_sdk.AsyncClient(api_key=api_key, base_url=base_url)
+    llm_kwargs = dict(model=model, base_url=base_url, api_key=api_key)
     if "doubao" in model.lower() or "volces" in base_url:
-        # 豆包 Seed 默认开思考(TTFT 7~12s)，ArkLLM 注入 thinking=disabled 救回 ~1s。
-        llm = ArkLLM(model=model, client=client, thinking=os.getenv("LLM_THINKING", "disabled"))
-    else:
-        llm = openai.LLM(model=model, client=client)
-    tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
+        # 豆包 Seed：关思考（1.5.x 的 openai.LLM 构造直接吃 extra_body，逐请求带上）。
+        llm_kwargs["extra_body"] = {"thinking": {"type": os.getenv("LLM_THINKING", "disabled")}}
+    llm = openai.LLM(**llm_kwargs)
 
-    # 断句只用 volc_v3.STT 的服务端 VAD（vad=None）。
-    # 教训：再叠一个 silero 本地 VAD 会与 STT 服务端 VAD「双重断句」——
-    # 一轮话被切两次、重复触发回复 → TTS 重复说话。要上 silero 必须同时配
-    # turn_detection 让两者只有一个做端点，并联机实测确认不重复，再开。
-    return AgentSession(stt=stt, llm=llm, tts=tts, vad=None)
+    # 本地 silero VAD 做断句/打断（1.5.x 的 turn-handling 会与 volc_v3.STT 协调，不会双重触发）。
+    return AgentSession(stt=stt, llm=llm, tts=tts, vad=silero.VAD.load())
 
 
 # Entry to the agent
@@ -378,13 +348,7 @@ async def entrypoint(ctx: agents.JobContext):
     logging.info("语音通路：三段式（volc_v3 STT + Ark LLM + volc_v3 TTS，新版统一 API）")
     session = _build_session()
 
-    # console 模式本地直连麦克风/扬声器：不挂 LiveKit 云端 BVC 降噪（那是云能力，
-    # 本地 console 用不上）。STT 自带服务端 VAD/断句。
-    await session.start(
-        room=ctx.room,
-        agent=agent,
-        room_input_options=RoomInputOptions(),
-    )
+    await session.start(room=ctx.room, agent=agent)
 
     # 三段式下 generate_reply 真能触发合成，让小灯主动开口。
     await session.generate_reply(
@@ -393,4 +357,11 @@ async def entrypoint(ctx: agents.JobContext):
 
 
 if __name__ == "__main__":
-    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint, num_idle_processes=1))
+    # console 模式本地直连麦克风/扬声器，不连云端房间；但 1.5.x 的 worker 仍强制校验
+    # ws_url/api_key/api_secret 非空，这里给假值占位（console 不会真去连）。
+    agents.cli.run_app(agents.WorkerOptions(
+        entrypoint_fnc=entrypoint,
+        ws_url="ws://localhost:7881/fake_console",
+        api_key="console",
+        api_secret="console_secret",
+    ))

@@ -60,12 +60,11 @@ async def smoke_llm() -> bool | None:
         return None
     model = os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428")  # Doubao-Seed-2.0-lite 全模态
     base_url = os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/")
-    client = openai_sdk.AsyncClient(api_key=key, base_url=base_url)  # 官方 SDK 客户端
-    brain = openai.LLM(model=model, client=client)
-    # 豆包 Seed 默认开「思考」，TTFT 7~12s；关掉降到 ~1s。冒烟按实际用法关思考。
-    extra = {}
+    # 豆包 Seed 默认开「思考」TTFT 7~12s；关掉降到 ~1s。1.5.x 的 openai.LLM 构造直接吃 extra_body。
+    llm_kwargs = dict(model=model, base_url=base_url, api_key=key)
     if "doubao" in model.lower() or "volces" in base_url:
-        extra["extra_kwargs"] = {"extra_body": {"thinking": {"type": os.getenv("LLM_THINKING", "disabled")}}}
+        llm_kwargs["extra_body"] = {"thinking": {"type": os.getenv("LLM_THINKING", "disabled")}}
+    brain = openai.LLM(**llm_kwargs)
 
     ctx = livekit_llm.ChatContext.empty()
     ctx.add_message(role="system", content="你是小灯，一盏爱吐槽的台灯，用一句简短中文回答。")
@@ -74,7 +73,7 @@ async def smoke_llm() -> bool | None:
     t0 = time.perf_counter()
     ttft = None
     buf = ""
-    stream = brain.chat(chat_ctx=ctx, conn_options=CONN, **extra)
+    stream = brain.chat(chat_ctx=ctx, conn_options=CONN)
     try:
         async for chunk in stream:
             delta = getattr(chunk, "delta", None)
