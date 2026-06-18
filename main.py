@@ -244,7 +244,7 @@ def _build_session() -> AgentSession:
         raise RuntimeError(
             "缺 VOLCENGINE_VOICE_API_KEY（volc_v3 STT/TTS 的新版 v3 单 X-Api-Key）"
         )
-    speaker = os.getenv("LAMP_SPEAKER", "zh_female_vv_jupiter_bigtts")
+    speaker = os.getenv("LAMP_SPEAKER", "zh_female_vv_uranus_bigtts")  # Vivi 2.0；与新版 v3 单 key 配套（jupiter 会报 55000000 resource 不匹配）
 
     stt = volc_v3.STT(api_key=voice_key)
     # LLM 用 openai 插件接方舟 Ark（OpenAI 兼容，新版 chat API，支持 function_tool）。

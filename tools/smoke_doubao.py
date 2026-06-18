@@ -100,7 +100,7 @@ async def smoke_tts(text: str, http: aiohttp.ClientSession, out: list[bytes]) ->
         return None
     tts = volc_v3.TTS(
         api_key=key,
-        speaker=os.getenv("LAMP_SPEAKER", "zh_female_vv_jupiter_bigtts"),
+        speaker=os.getenv("LAMP_SPEAKER", "zh_female_vv_uranus_bigtts"),
         sample_rate=SR,
         http_session=http,
     )
