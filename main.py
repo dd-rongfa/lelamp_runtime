@@ -12,10 +12,32 @@ from livekit.agents import (
 import logging
 import os
 from livekit.plugins import openai
+from livekit.agents.types import NOT_GIVEN
 from typing import Union
 from lelamp.service.motors.motors_service import MotorsService
 from lelamp.service.rgb.rgb_service import RGBService
 from lelamp.voice import volc_v3  # 本仓库自写的火山 v3 单 key STT/TTS（三段式用）
+
+
+class ArkLLM(openai.LLM):
+    """方舟 Ark LLM：默认关掉豆包 Seed 系列的「思考」(thinking)。
+
+    Seed-2.0 全模态默认开思维链，首字延迟实测 7~12s，对语音台灯不可用；
+    关掉后 TTFT 降到 ~1s。小灯只说一两句口语，不需要 chain-of-thought。
+    AgentSession 内部自行调 chat()，故在此把 thinking 注入到每次请求的 extra_body。
+    设 LLM_THINKING=enabled/auto 可恢复。
+    """
+
+    def __init__(self, *args, thinking: str = "disabled", **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._thinking = thinking
+
+    def chat(self, *, extra_kwargs=NOT_GIVEN, **kwargs):
+        merged = dict(extra_kwargs) if isinstance(extra_kwargs, dict) else {}
+        body = dict(merged.get("extra_body") or {})
+        body.setdefault("thinking", {"type": self._thinking})
+        merged["extra_body"] = body
+        return super().chat(extra_kwargs=merged, **kwargs)
 
 load_dotenv()
 
@@ -251,11 +273,15 @@ def _build_session() -> AgentSession:
     # 默认 Doubao-Seed-2.0-lite：全模态（音视图文统一理解），一个脑同时管聊天和看图，
     # 后续「看作业」等视觉能力可直接复用这颗脑，不必另接 VLM。
     # 与原版 livekit-agents[openai] 一致；换 DeepSeek 等其它 OpenAI 兼容端点只需改 base_url/key。
-    llm = openai.LLM(
-        model=os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428"),
-        base_url=os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/"),
-        api_key=os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY"),
-    )
+    model = os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428")
+    base_url = os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/")
+    api_key = os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY")
+    # 豆包/方舟用 ArkLLM 关思考（救 TTFT）；其它端点（如 DeepSeek）用原生 openai.LLM。
+    if "doubao" in model.lower() or "volces" in base_url:
+        llm = ArkLLM(model=model, base_url=base_url, api_key=api_key,
+                     thinking=os.getenv("LLM_THINKING", "disabled"))
+    else:
+        llm = openai.LLM(model=model, base_url=base_url, api_key=api_key)
     tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
 
     # 可选 silero VAD：装了就用（更稳的断句/打断）；没装就靠 volc_v3.STT 自带 VAD 断句。
