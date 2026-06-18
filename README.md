@@ -50,6 +50,11 @@
 # 1. 装 uv（https://docs.astral.sh/uv/），然后：
 git clone https://github.com/dd-rongfa/lelamp_runtime.git
 cd lelamp_runtime
+
+# ⚠️ Linux/Ubuntu 必装系统库（音频原生库，pip/uv 装不了，不装则无声）：
+#    sudo apt install -y libportaudio2
+#    （Windows/macOS 的 sounddevice 轮子自带，无需此步）
+
 uv sync                      # 只装语音那套轻依赖，不碰硬件库
 
 # 2. 配凭据（需要你自己的火山豆包 key，见 .env.example 注释里怎么拿）
@@ -110,7 +115,8 @@ uv sync --extra hardware   # 接了舵机/LED 的树莓派再加这个
 
 装得慢或 LFS 报错：`GIT_LFS_SKIP_SMUDGE=1 uv sync`、`export UV_CONCURRENT_DOWNLOADS=1`。
 
-**依赖分两层（这也回答了"到底要什么"）：**
+**依赖分三层（这也回答了"到底要什么"）：**
+- **系统原生库**（`apt` 装，非 Python）：Linux/Ubuntu 需 `sudo apt install -y libportaudio2`（`sounddevice` 底层的 PortAudio，pip/uv 管不了；不装能启动但没声音）。真机另需 `portaudio19-dev`（编译 `pyaudio` 用）。Windows/macOS 免此步。
 - **软件核心**（`uv sync` 就装）：`livekit-agents[openai]`（框架 + 官方 OpenAI SDK 接方舟 Ark）、
   自写 `lelamp/voice/volc_v3`（STT/TTS，无额外包）、`numpy`、`sounddevice`、`python-dotenv`。
 - **硬件专用**（`--extra hardware` 才装）：`feetech-servo-sdk`、`lerobot`（机械臂）、
