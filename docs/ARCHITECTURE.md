@@ -36,11 +36,17 @@
 
 | 模式 | 组成 | 特点 | 适用 |
 |---|---|---|---|
-| `realtime`（默认） | `volcengine.RealtimeModel` 单模型 | 端到端、延迟低、单 key；`generate_reply` 为空壳，开场靠 `opening`，工具调用偏弱 | 日常对话、演示 |
-| `cascaded` | `BigModelSTT` + `volcengine.LLM`(Ark) + `volcengine.TTS` | 每段可单独测延迟、组件可换、工具调用走 OpenAI 兼容稳定、`generate_reply` 真可用 | 测试、复现、调试三瓶颈 |
+| `realtime`（默认） | `volcengine.RealtimeModel` 单模型 | 端到端、延迟低、单 key；`generate_reply` 为空壳，开场靠 `opening`，**不支持工具调用** | 日常对话、演示 |
+| `cascaded` | `volc_v3.STT` + `volcengine.LLM`(Ark) + `volc_v3.TTS` | 每段可单独测延迟、组件可换、**工具调用可用**、`generate_reply` 真可用 | 测试、复现、调试三瓶颈 |
 
-`cascaded` 断句默认用 `BigModelSTT` 自带服务端 VAD；装了 `livekit-plugins-silero` 则自动接 `vad=` 更稳。
-两模式共用同一套 `LeLamp` Agent 与 4 个 `@function_tool`，只换"听+想+说"的实现。
+`cascaded` 的 STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（火山新版 v3「单 X-Api-Key」，
+自包含 WS/HTTP 协议，移植自 voice_test，不依赖旧 volcengine 插件的 STT/TTS）。
+该插件按 1.5.x 写成，但**实测在本仓库锁定的 livekit-agents 1.2.9 上原样可构造**——因为豆包协议与 livekit 版本无关，
+插件只是把协议包成 `stt.STT`/`tts.TTS` 基类，而这些基类在 1.2.9 已具备。**故本仓库不改版本锁，零依赖升级风险。**
+
+断句默认用 `volc_v3.STT` 自带服务端 VAD；装了 `livekit-plugins-silero` 则自动接 `vad=` 更稳。
+两模式共用同一套 `LeLamp` Agent 与 4 个 `@function_tool`，只换"听+想+说"的实现
+（realtime 不走工具，cascaded 走工具）。
 
 ## 2. 交互范式：常开免唤醒
 
@@ -66,6 +72,7 @@
 | `motors/motors_service.py` | 电机服务：收到 `play` 事件读取 CSV 逐帧 `send_action` 驱动舵机；含**无硬件 mock 降级**（缺 lerobot 或设 `LELAMP_NO_HARDWARE` 时只打日志） |
 | `motors/animation_service.py` | 动作平滑插值相关 |
 | `rgb/rgb_service.py` | 灯珠服务：`solid` / `paint` 事件控制 8×5=40 颗灯 |
+| `voice/volc_v3/` | 自写火山 v3「单 X-Api-Key」STT/TTS 插件（`_protocol`/`stt`/`tts`），三段式用，移植自 voice_test |
 
 ### 3.3 机器人本体（lerobot 一套，纯硬件，与语音无关）
 | 文件 | 作用 |

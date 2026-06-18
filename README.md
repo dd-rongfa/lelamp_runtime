@@ -49,6 +49,7 @@ lelamp_runtime/
 ├── tools/smoke_doubao.py   # 豆包语音连接/首音延迟冒烟测试
 ├── pyproject.toml          # 依赖与项目配置
 ├── lelamp/                 # 核心包
+│   ├── voice/volc_v3/      # 自写火山 v3 单 key STT/TTS 插件（三段式用，移植自 voice_test）
 │   ├── service/            # 事件驱动服务框架（base / motors / rgb）
 │   ├── recordings/*.csv    # 10 段预录动作
 │   ├── setup_motors.py     # 舵机 ID 设置
@@ -288,24 +289,26 @@ Sample apps to test LeLamp's capabilities.
 
 本 fork 支持两种语音模式，用环境变量 `LELAMP_VOICE_MODE` 切换（默认 `realtime`）：
 
-| 模式 | 说明 | 适用 |
-|---|---|---|
-| `realtime`（默认） | 豆包端到端实时语音，单模型单 key，延迟低 | 日常对话、演示 |
-| `cascaded` | STT + LLM + TTS 三段式（纯豆包） | 测试：工具调用稳、每段延迟可单独量、组件可换 |
+| 模式 | 听/想/说 | 工具调用 | 适用 |
+|---|---|---|---|
+| `realtime`（默认） | 豆包端到端实时语音（`volcengine.RealtimeModel`） | ❌ 不支持（纯对话体验） | 日常对话、演示 |
+| `cascaded` | STT + LLM + TTS 三段式 | ✅ 支持（能调动作/灯光） | 测试：工具调用稳、每段延迟可单独量、组件可换 |
+
+> 三段式的 STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（火山新版 v3「单 X-Api-Key」，
+> 自包含协议，不依赖旧 volcengine 插件的 STT/TTS）。它对应 livekit-agents 1.5.x 写成，
+> 但实测在本仓库锁定的 **1.2.9** 上原样可用——**故本仓库不改 livekit 版本**。
 
 console 本地模式直连麦克风/扬声器，**不需要** LiveKit 云端密钥。在仓库根目录建 `.env`：
 
 ```bash
-# ---- realtime 模式（默认）----
-VOLCENGINE_REALTIME_APP_ID=
+# ---- realtime 模式（默认）：豆包端到端实时语音 ----
+VOLCENGINE_APP_ID=                 # 也可用 VOLCENGINE_REALTIME_APP_ID
 VOLCENGINE_REALTIME_ACCESS_TOKEN=
 
-# ---- cascaded 模式（三段式，凭据分三套，旧版双参 + Ark 单 key 不可混用）----
-VOLCENGINE_APP_ID=                 # STT/TTS 共用的应用 ID
-VOLCENGINE_STT_ACCESS_TOKEN=       # STT（BigModelSTT）
-VOLCENGINE_LLM_API_KEY=            # LLM（Ark，OpenAI 兼容）
-VOLCENGINE_TTS_ACCESS_TOKEN=       # TTS
-# 可选：VOLCENGINE_LLM_MODEL / VOLCENGINE_TTS_CLUSTER / VOLCENGINE_TTS_VOICE
+# ---- cascaded 模式（三段式）----
+VOLCENGINE_VOICE_API_KEY=          # STT/TTS 共用：火山新版 v3 单 X-Api-Key（volc_v3 用）
+VOLCENGINE_LLM_API_KEY=            # LLM：Ark/方舟 的 LLM key（与语音 key 是两套，不可混用）
+# 可选：VOLCENGINE_LLM_MODEL（默认 doubao-1-5-lite-32k-250115）/ LAMP_SPEAKER（默认 jupiter 女声）
 ```
 
 运行：
@@ -314,7 +317,7 @@ VOLCENGINE_TTS_ACCESS_TOKEN=       # TTS
 # realtime（默认）
 sudo uv run main.py console
 
-# cascaded（三段式）
+# cascaded（三段式，工具可用）
 LELAMP_VOICE_MODE=cascaded sudo uv run main.py console
 
 # 平滑动画模式
@@ -323,7 +326,7 @@ sudo uv run smooth_animation.py console
 
 无硬件（PC 上纯语音复现）时设 `LELAMP_NO_HARDWARE=1`，电机/灯光降级为 mock 只打日志。
 连接/首音延迟冒烟（不开麦）：`uv run tools/smoke_doubao.py`。
-cascaded 模式想要更稳的断句/打断，可装 `livekit-plugins-silero`（装了自动启用 VAD，否则靠 BigModelSTT 自带 VAD）。
+cascaded 想要更稳的断句/打断，可装 `livekit-plugins-silero`（装了自动启用 VAD，否则靠 volc_v3.STT 自带 VAD）。
 
 In case your lamp is not `lelamp`, change the id of the lamp inside main.py:
 

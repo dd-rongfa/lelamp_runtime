@@ -15,6 +15,7 @@ from livekit.plugins import volcengine
 from typing import Union
 from lelamp.service.motors.motors_service import MotorsService
 from lelamp.service.rgb.rgb_service import RGBService
+from lelamp.voice import volc_v3  # 本仓库自写的火山 v3 单 key STT/TTS（三段式用）
 
 load_dotenv()
 
@@ -255,32 +256,31 @@ def _build_realtime_session() -> AgentSession:
 
 
 def _build_cascaded_session() -> AgentSession:
-    """STT + LLM + TTS 三段式（纯豆包）。
+    """STT + LLM + TTS 三段式。
 
-    - STT：BigModelSTT，自带服务端 VAD 断句，无需 silero（要更准可装 livekit-plugins-silero 接 vad=）。
-    - LLM：volcengine.LLM 走 Ark OpenAI 兼容，function_tool 工具调用原生可用。
-    - TTS：volcengine.TTS。
+    语音 I/O 用本仓库自写插件 lelamp.voice.volc_v3（火山新版 v3「单 X-Api-Key」，
+    自包含 WS/HTTP 协议，不依赖旧 volcengine 插件的 STT/TTS；已在 livekit-agents 1.2.9 实测可构造）。
+    - STT：volc_v3.STT（seedasr 2.0，自带服务端 VAD 断句，无需 silero）。
+    - LLM：volcengine.LLM 走 Ark（OpenAI 兼容），function_tool 工具调用可用——这是三段式相对实时的关键收益。
+    - TTS：volc_v3.TTS（按音色自动选 resource_id）。
     人设走 Agent.instructions（已在 LeLamp 里设），LLM 自动吃；开场用 generate_reply 真合成。
-    凭据分三套（旧版双参 + Ark 单 key 不可混用），缺哪套插件会直接报错提示。
     """
-    app_id = os.getenv("VOLCENGINE_APP_ID") or os.getenv("VOLCENGINE_REALTIME_APP_ID")
+    # STT/TTS 共用一把新版 v3 单 key（与 voice_test 同名，方便复用同一份凭据）。
+    voice_key = os.getenv("VOLCENGINE_VOICE_API_KEY")
+    if not voice_key:
+        raise RuntimeError(
+            "缺 VOLCENGINE_VOICE_API_KEY（volc_v3 STT/TTS 的新版 v3 单 X-Api-Key）"
+        )
+    speaker = os.getenv("LAMP_SPEAKER", "zh_female_vv_jupiter_bigtts")
 
-    stt = volcengine.BigModelSTT(
-        app_id=app_id,
-        # access_token 缺省读 VOLCENGINE_STT_ACCESS_TOKEN
-    )
+    stt = volc_v3.STT(api_key=voice_key)
     llm = volcengine.LLM(
         model=os.getenv("VOLCENGINE_LLM_MODEL", "doubao-1-5-lite-32k-250115"),
-        # api_key 缺省读 VOLCENGINE_LLM_API_KEY
+        # api_key 缺省读 VOLCENGINE_LLM_API_KEY（Ark/方舟 的 LLM key，与语音 key 是两套）
     )
-    tts = volcengine.TTS(
-        app_id=app_id,
-        cluster=os.getenv("VOLCENGINE_TTS_CLUSTER", "volcano_tts"),
-        voice=os.getenv("VOLCENGINE_TTS_VOICE", "zh_female_vv_jupiter_bigtts"),
-        # access_token 缺省读 VOLCENGINE_TTS_ACCESS_TOKEN
-    )
+    tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
 
-    # 可选 silero VAD：装了就用，更稳的断句/打断；没装就靠 BigModelSTT 自带 VAD。
+    # 可选 silero VAD：装了就用（更稳的断句/打断）；没装就靠 volc_v3.STT 自带 VAD 断句。
     vad = None
     try:
         from livekit.plugins import silero
