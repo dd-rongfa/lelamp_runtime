@@ -248,9 +248,11 @@ def _build_session() -> AgentSession:
 
     stt = volc_v3.STT(api_key=voice_key)
     # LLM 用 openai 插件接方舟 Ark（OpenAI 兼容，新版 chat API，支持 function_tool）。
+    # 默认 Doubao-Seed-2.0-lite：全模态（音视图文统一理解），一个脑同时管聊天和看图，
+    # 后续「看作业」等视觉能力可直接复用这颗脑，不必另接 VLM。
     # 与原版 livekit-agents[openai] 一致；换 DeepSeek 等其它 OpenAI 兼容端点只需改 base_url/key。
     llm = openai.LLM(
-        model=os.getenv("LLM_MODEL", "doubao-1-5-lite-32k-250115"),
+        model=os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428"),
         base_url=os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/"),
         api_key=os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY"),
     )

@@ -58,7 +58,7 @@ async def smoke_llm() -> bool | None:
         print("[LLM ] SKIP  缺 LLM_API_KEY（方舟 Ark）")
         return None
     brain = openai.LLM(
-        model=os.getenv("LLM_MODEL", "doubao-1-5-lite-32k-250115"),
+        model=os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428"),  # Doubao-Seed-2.0-lite 全模态
         base_url=os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/"),
         api_key=key,
     )

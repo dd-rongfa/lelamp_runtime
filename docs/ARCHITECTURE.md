@@ -37,7 +37,7 @@
 | 环节 | 组成 | 说明 |
 |---|---|---|
 | STT | `volc_v3.STT` | 火山新版 v3「单 X-Api-Key」，seedasr 2.0，自带服务端 VAD 断句 |
-| LLM | 方舟 Ark chat（OpenAI 兼容） | 新版 API，**工具调用可用**（`@function_tool` 驱动动作/灯光） |
+| LLM | 方舟 Ark（默认 Doubao-Seed-2.0-lite **全模态**） | OpenAI 兼容，**工具调用可用**（`@function_tool` 驱动动作/灯光）；全模态=聊天+看图一颗脑，「看作业」可复用 |
 | TTS | `volc_v3.TTS` | 火山新版 v3「单 X-Api-Key」，按音色自动选 resource_id |
 
 STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（自包含 WS/HTTP 协议，移植自 voice_test，
