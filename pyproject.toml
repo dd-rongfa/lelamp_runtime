@@ -20,6 +20,10 @@ dependencies = [
 lerobot = { git = "https://github.com/huggingface/lerobot" }
 
 [project.optional-dependencies]
+# 摄像头视觉（让 look 看实时画面）：uv sync --extra vision。轻量、无硬件也能装。
+vision = [
+    "opencv-python>=4.8",
+]
 # 硬件到位后安装：uv sync --extra hardware（在树莓派/接舵机的机器上）
 hardware = [
     "feetech-servo-sdk>=1.0.0",

@@ -47,24 +47,32 @@ class ArkLLM(openai.LLM):
 # 用全模态豆包（同一颗脑）做客观描述，再由小灯主脑用人设转述，省得双重人设。
 # 无摄像头也能跑：配 LAMP_VISION_IMAGE 指一张图即可端到端验证。
 # ---------------------------------------------------------------------------
-def _capture_frame() -> Union[str, None]:
-    """抓一帧，返回 data URL（base64）；拿不到返回 None。"""
-    path = os.getenv("LAMP_VISION_IMAGE", "").strip()
-    if path and os.path.exists(path):
-        b64 = base64.b64encode(open(path, "rb").read()).decode()
-        return f"data:image/jpeg;base64,{b64}"
+def _capture_frame() -> "tuple[Union[str, None], Union[str, None]]":
+    """抓一帧，返回 (data_url, source)；拿不到返回 (None, None)。
+    source='camera' 实时摄像头 / 'image' 预设测试图。
+    **摄像头优先**——有真摄像头就看实景，没有才退回固定图（兜底/demo 用）。
+    """
+    # 1) 优先真摄像头（装了 opencv 且能读到帧）
     try:
-        import cv2  # 仅在真有摄像头时才需要，缺了不影响其它功能
+        import cv2
 
         cap = cv2.VideoCapture(int(os.getenv("LAMP_CAMERA_INDEX", "0")))
         ok, frame = cap.read()
         cap.release()
-        if ok:
+        if ok and frame is not None:
             _, buf = cv2.imencode(".jpg", frame)
-            return f"data:image/jpeg;base64,{base64.b64encode(buf).decode()}"
+            return f"data:image/jpeg;base64,{base64.b64encode(buf).decode()}", "camera"
     except Exception:
         pass
-    return None
+    # 2) 退回固定测试图（相对路径按仓库根解析，避免 cwd 问题）
+    path = os.getenv("LAMP_VISION_IMAGE", "").strip()
+    if path:
+        if not os.path.isabs(path):
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+        if os.path.exists(path):
+            b64 = base64.b64encode(open(path, "rb").read()).decode()
+            return f"data:image/jpeg;base64,{b64}", "image"
+    return None, None
 
 
 async def _vision_describe(data_url: str) -> str:
@@ -266,13 +274,17 @@ class LeLamp(Agent):
         返回画面内容的客观描述，你再用自己的口吻讲给主人听。
         """
         print("LeLamp: look function called")
-        data_url = _capture_frame()
+        data_url, source = _capture_frame()
         if data_url is None:
-            return "看不见：没接摄像头，也没配 LAMP_VISION_IMAGE 测试图。"
+            return "看不见：没接摄像头（装 opencv：uv sync --extra vision），也没配 LAMP_VISION_IMAGE。"
         try:
-            return await _vision_describe(data_url)
+            desc = await _vision_describe(data_url)
         except Exception as e:
             return f"看是看了，但没认出来：{e}"
+        if source == "image":
+            # 兜底图不是实景，如实说明，别让小灯把占位图当成眼前画面（否则像瞎编）。
+            return f"（说明：当前没接摄像头，这是预设测试图的内容、不是你眼前的实景）{desc}"
+        return desc
 
     @function_tool
     async def set_volume(self, volume_percent: int) -> str:
