@@ -13,36 +13,53 @@
 > - 人设中文化（小灯）；锁定 `livekit-agents==1.2.9`；硬件依赖移入 `pyproject` 的可选 `hardware`。
 > - 新增 `tools/smoke_doubao.py`：不开麦的连接/首音延迟冒烟。
 
-This repository holds the code for controlling LeLamp. The runtime provides a comprehensive control system for the robotic lamp, including motor control, recording/replay functionality, voice interaction, and testing capabilities.
+本仓库是「小灯」——把上游 [LeLamp](https://github.com/humancomputerlab/LeLamp)（基于 [Apple Elegnt](https://machinelearning.apple.com/research/elegnt-expressive-functional-movement) 的开源机器人台灯，由 [Human Computer Lab](https://www.humancomputerlab.com/) 开发）复现为**中文豆包端到端实时语音版**的运行时代码。提供电机控制、动作录制/回放、实时语音对话、RGB 灯光与硬件自检能力。
 
-[LeLamp](https://github.com/humancomputerlab/LeLamp) is an open source robot lamp based on [Apple's Elegnt](https://machinelearning.apple.com/research/elegnt-expressive-functional-movement), made by [[Human Computer Lab]](https://www.humancomputerlab.com/)
+## 系统架构
 
-## Overview
+> 📐 **完整架构文档见 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)** —— 整体架构、交互范式、模块清单、运行时能力、与上游差异、关键认知。
 
-LeLamp Runtime is a Python-based control system that interfaces with the hardware components of LeLamp including:
+一句话定位：**这不是「机器人」，而是给台灯套了一个能自主调动作和灯光的实时语音 Agent**。代码本身只负责「硬件抽象 + 把硬件暴露成 LLM 工具」，对话智能完全来自外部实时语音大模型（上游 OpenAI Realtime → 本仓库豆包 / volcengine Realtime）。
 
-- Servo motors for articulated movement
-- Audio system (microphone and speaker)
-- RGB LED lighting
-- Camera system
-- Voice interaction capabilities
+```
+                  main.py  (LiveKit Agent 入口)
+                       │
+        ┌──────────────┴───────────────┐
+   语音大脑(豆包 Realtime)          硬件控制(@function_tool)
+   常开麦 / 服务端 VAD / 说话           │
+                       ┌───────────┼────────────┐
+                  MotorsService  RGBService   set_volume(amixer)
+                       │
+              ServiceBase (后台线程 + 优先级事件队列, base.py)
+                       │
+              LeLampFollower → lerobot → 串口舵机
+```
 
-## Project Structure
+**关键认知（详见架构文档）：**
+- 「智能」全在大模型，代码零决策逻辑——换模型 = 换大脑，硬件层不动。
+- 动作是「死」的，只能回放固定 10 段 CSV，想要新表情得离线 `record.py` 重录。
+- 交互是**常开免唤醒**：进程启动即常驻开麦，靠服务端 VAD 判断说话，无关键词唤醒。
+
+## 目录结构
 
 ```
 lelamp_runtime/
-├── main.py                 # Main runtime entry point
-├── pyproject.toml         # Project configuration and dependencies
-├── lelamp/                # Core package
-│   ├── setup_motors.py    # Motor configuration and setup
-│   ├── calibrate.py       # Motor calibration utilities
-│   ├── list_recordings.py # List all recorded motor movements
-│   ├── record.py          # Movement recording functionality
-│   ├── replay.py          # Movement replay functionality
-│   ├── follower/          # Follower mode functionality
-│   ├── leader/            # Leader mode functionality
-│   └── test/              # Hardware testing modules
-└── uv.lock               # Dependency lock file
+├── main.py                 # 运行入口（装配豆包语音 + Agent + 工具）
+├── docs/ARCHITECTURE.md    # 软件架构文档
+├── tools/smoke_doubao.py   # 豆包语音连接/首音延迟冒烟测试
+├── pyproject.toml          # 依赖与项目配置
+├── lelamp/                 # 核心包
+│   ├── service/            # 事件驱动服务框架（base / motors / rgb）
+│   ├── recordings/*.csv    # 10 段预录动作
+│   ├── setup_motors.py     # 舵机 ID 设置
+│   ├── calibrate.py        # 舵机标定
+│   ├── list_recordings.py  # 列出动作
+│   ├── record.py           # 录制动作
+│   ├── replay.py           # 回放动作
+│   ├── follower/           # 从动臂（台灯本体）
+│   ├── leader/             # 主动臂（遥操作）
+│   └── test/               # 硬件自检
+└── uv.lock                 # 依赖锁
 ```
 
 ## Installation
@@ -57,7 +74,7 @@ lelamp_runtime/
 1. Clone the runtime repository:
 
 ```bash
-git clone https://github.com/humancomputerlab/lelamp_runtime.git
+git clone https://github.com/dd-rongfa/lelamp_runtime.git
 cd lelamp_runtime
 ```
 
@@ -269,39 +286,30 @@ Sample apps to test LeLamp's capabilities.
 
 ### LiveKit Voice Agent
 
-To run a conversational agent on LeLamp, create a .env file with the following content in the root of this directory in your Raspberry Pi.
+本 fork 用**豆包端到端实时语音**，运行前在仓库根目录建 `.env`：
 
 ```bash
-OPENAI_API_KEY=
-LIVEKIT_URL=
-LIVEKIT_API_KEY=
-LIVEKIT_API_SECRET=
+# 豆包 / 火山引擎实时语音（main.py 读取）
+VOLCENGINE_REALTIME_APP_ID=
+VOLCENGINE_REALTIME_ACCESS_TOKEN=
 ```
 
-On how to get LiveKit secrets, please refer to [LiveKit's guide](https://docs.livekit.io/agents/start/voice-ai/). Install LiveKit CLI, then you can run the following command:
+> 凭据说明：插件默认读 `VOLCENGINE_REALTIME_APP_ID` / `VOLCENGINE_REALTIME_ACCESS_TOKEN`；
+> `main.py` 也兼容 `VOLCENGINE_APP_ID` 命名。注意新版单 key 与旧版双参不可混用。
+
+console 本地模式直连麦克风/扬声器，**不需要** LiveKit 云端密钥。运行：
 
 ```bash
-lk app env -w
-cat .env.local
-```
-
-This will automatically create an `.env.local` file for you, which contains all the secrets on LiveKit side.
-
-On how to get OpenAI secrets, you can follow this [FAQ](https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key).
-
-Then you can run the agent app by:
-
-```bash
-# Only need to run this once
-sudo uv run main.py download-files
-
 # Pick one of the below
-# For Discrete Animation Mode
+# 离散动画模式（默认）
 sudo uv run main.py console
 
-# For Smooth Animation Mode
+# 平滑动画模式
 sudo uv run smooth_animation.py console
 ```
+
+无硬件（PC 上纯语音复现）时设 `LELAMP_NO_HARDWARE=1`，电机/灯光降级为 mock 只打日志。
+连接/首音延迟冒烟（不开麦）：`uv run tools/smoke_doubao.py`。
 
 In case your lamp is not `lelamp`, change the id of the lamp inside main.py:
 
