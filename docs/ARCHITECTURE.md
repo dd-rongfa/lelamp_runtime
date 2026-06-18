@@ -5,9 +5,9 @@
 
 ## 0. 一句话定位
 
-这不是一个「机器人」，而是**给台灯套了一个能自主调动作和灯光的实时语音 Agent**：
-代码本身只负责「硬件抽象 + 把硬件暴露成 LLM 工具」，对话智能完全来自外部实时语音大模型
-（上游用 OpenAI Realtime，本仓库换成豆包 / volcengine Realtime）。
+这不是一个「机器人」，而是**给台灯套了一个能自主调动作和灯光的语音 Agent**：
+代码本身只负责「硬件抽象 + 把硬件暴露成 LLM 工具」，对话智能来自外部语音大模型
+（上游用 OpenAI Realtime，本仓库换成火山豆包新版统一 API 的 STT+LLM+TTS 三段式）。
 
 ## 1. 整体架构
 
@@ -15,7 +15,7 @@
                   main.py  (LiveKit Agent 入口)
                        │
         ┌──────────────┴───────────────┐
-   语音大脑(豆包 Realtime)          硬件控制(@function_tool)
+ 语音大脑(STT+LLM+TTS 三段式)      硬件控制(@function_tool)
    常开麦 / 服务端 VAD / 说话           │
                        ┌───────────┼────────────┐
                   MotorsService  RGBService   set_volume(amixer)
@@ -30,32 +30,32 @@
 主程序通过 `dispatch(event_type, payload, priority)` 投递事件，线程间互不阻塞。
 大模型通过 `@function_tool` 间接调用这些 `dispatch`。
 
-### 语音大脑：两种可切换模式
+### 语音大脑：STT + LLM + TTS 三段式（唯一通路，全程新版统一 API）
 
-由环境变量 `LELAMP_VOICE_MODE` 选择（默认 `realtime`），`main.py` 据此装配不同 `AgentSession`：
+`main.py` 装配单一 `AgentSession`，三个环节全部走火山**新版统一 API**：
 
-| 模式 | 组成 | 特点 | 适用 |
-|---|---|---|---|
-| `realtime`（默认） | `volcengine.RealtimeModel` 单模型 | 端到端、延迟低、单 key；`generate_reply` 为空壳，开场靠 `opening`，**不支持工具调用** | 日常对话、演示 |
-| `cascaded` | `volc_v3.STT` + `volcengine.LLM`(Ark) + `volc_v3.TTS` | 每段可单独测延迟、组件可换、**工具调用可用**、`generate_reply` 真可用 | 测试、复现、调试三瓶颈 |
+| 环节 | 组成 | 说明 |
+|---|---|---|
+| STT | `volc_v3.STT` | 火山新版 v3「单 X-Api-Key」，seedasr 2.0，自带服务端 VAD 断句 |
+| LLM | 方舟 Ark chat（OpenAI 兼容） | 新版 API，**工具调用可用**（`@function_tool` 驱动动作/灯光） |
+| TTS | `volc_v3.TTS` | 火山新版 v3「单 X-Api-Key」，按音色自动选 resource_id |
 
-`cascaded` 的 STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（火山新版 v3「单 X-Api-Key」，
-自包含 WS/HTTP 协议，移植自 voice_test，不依赖旧 volcengine 插件的 STT/TTS）。
-该插件按 1.5.x 写成，但**实测在本仓库锁定的 livekit-agents 1.2.9 上原样可构造**——因为豆包协议与 livekit 版本无关，
-插件只是把协议包成 `stt.STT`/`tts.TTS` 基类，而这些基类在 1.2.9 已具备。**故本仓库不改版本锁，零依赖升级风险。**
+STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（自包含 WS/HTTP 协议，移植自 voice_test，
+不依赖旧 volcengine 插件的 STT/TTS）。该插件按 1.5.x 写成，但**实测在本仓库锁定的 livekit-agents 1.2.9 上原样可构造**
+——因为豆包协议与 livekit 版本无关，插件只是把协议包成 `stt.STT`/`tts.TTS` 基类，而这些基类在 1.2.9 已具备。
+**故本仓库不改版本锁，零依赖升级风险。**
 
 断句默认用 `volc_v3.STT` 自带服务端 VAD；装了 `livekit-plugins-silero` 则自动接 `vad=` 更稳。
-两模式共用同一套 `LeLamp` Agent 与 4 个 `@function_tool`，只换"听+想+说"的实现
-（realtime 不走工具，cascaded 走工具）。
+
+> **已弃用移除**：旧的 `volcengine.RealtimeModel`（豆包端到端实时，旧 API、`generate_reply` 空壳、不支持工具调用）。
+> 当前只保留新版统一 API 的三段式通路。
 
 ## 2. 交互范式：常开免唤醒
 
 - 进程启动后 `session.start()` 即常驻，麦克风全程开启。
 - 由**模型服务端自带的 VAD**（语音活动检测）判断用户何时开口 / 说完 / 是否打断，
   **没有关键词唤醒（wake word）**这一层。
-- 「谁先开口」的差异：
-  - 上游 OpenAI 版：`session.generate_reply(...)` 让模型主动说第一句。
-  - 本仓库豆包版：豆包插件的 `generate_reply` 为空壳，改用 `opening="哒哒——我是小灯！"` 开场。
+- 开场：三段式下 `session.generate_reply(...)` 真能触发 LLM+TTS 合成，让小灯主动说第一句。
 - 现状权衡：麦一直开 → 费电 / 费算力、旁人闲聊可能误触发；无唤醒词 → 无法待机省电。
 
 ## 3. 模块清单
@@ -63,7 +63,7 @@
 ### 3.1 运行主程序
 | 文件 | 作用 |
 |---|---|
-| `main.py` | 运行入口。装配豆包 Realtime 语音模型 + LeLamp Agent + 4 个工具，运行 LiveKit console |
+| `main.py` | 运行入口。装配三段式语音（volc_v3 STT + Ark LLM + volc_v3 TTS）+ LeLamp Agent + 4 个工具，运行 LiveKit console |
 
 ### 3.2 服务框架 `lelamp/service/`
 | 文件 | 作用 |
@@ -98,7 +98,7 @@
 
 对话期间由大模型自主调用的 `@function_tool`：
 
-1. **实时语音对话** —— 听 + 想 + 说一体（豆包 Realtime）
+1. **语音对话** —— STT + LLM + TTS 三段式（火山豆包新版统一 API）
 2. `play_recording` —— 播放 10 段预录肢体动作之一
 3. `set_rgb_solid` —— 设灯纯色
 4. `paint_rgb_pattern` —— 画灯图案（40 色，8×5 网格）
@@ -108,12 +108,14 @@
 
 ## 5. 与上游的差异（本仓库改动）
 
-| 维度 | 上游（OpenAI 版） | 本仓库（豆包版） |
+| 维度 | 上游（OpenAI 版） | 本仓库（豆包三段式版） |
 |---|---|---|
-| 语音模型 | `openai.realtime.RealtimeModel(voice="ballad")` | `volcengine.RealtimeModel(speaker="zh_female_vv_jupiter_bigtts")` |
+| 语音架构 | `openai.realtime.RealtimeModel` 端到端单模型 | STT+LLM+TTS 三段式（全程火山新版统一 API） |
+| STT/TTS | （含在 realtime 内） | 自写插件 `lelamp/voice/volc_v3`（v3 单 X-Api-Key） |
+| LLM | （含在 realtime 内） | 方舟 Ark chat（OpenAI 兼容，工具可用） |
 | 人设 | 英文毒舌 LeLamp | 中文「小灯」 |
-| 开场 | `generate_reply(...)` | `opening="哒哒——我是小灯！"` |
-| 降噪 | LiveKit BVC 云端降噪 | console 本地直连，依赖豆包服务端 VAD |
+| 开场 | `generate_reply(...)` | `generate_reply(...)`（三段式真可用） |
+| 降噪 | LiveKit BVC 云端降噪 | console 本地直连，依赖 STT 服务端 VAD |
 | 无硬件 | 无 | `LELAMP_NO_HARDWARE` mock 降级 |
 | 许可 | — | 补 GPL-3.0 LICENSE + 署名与修改说明 |
 

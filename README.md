@@ -8,24 +8,24 @@
 > 本 fork 延续 GPL-3.0（见 [LICENSE](./LICENSE)）。
 >
 > **本 fork 相对上游的改动（GPL §5 要求注明修改）：**
-> - 语音后端从 OpenAI Realtime 替换为**豆包端到端实时语音大模型**（`livekit-plugins-volcengine` 的 `RealtimeModel`）。
+> - 语音后端从 OpenAI Realtime 改为**火山豆包新版统一 API 的 STT + LLM + TTS 三段式**：STT/TTS 用本仓库自写插件 `lelamp/voice/volc_v3`（v3 单 X-Api-Key），LLM 走方舟 Ark；工具调用可用。
 > - 新增**无硬件运行**支持：`MotorsService`/`RGBService` 在缺硬件库或设 `LELAMP_NO_HARDWARE=1` 时降级为 mock（只打日志，不碰串口/GPIO），便于在 PC 上做纯语音复现。
-> - 人设中文化（小灯）；锁定 `livekit-agents==1.2.9`；硬件依赖移入 `pyproject` 的可选 `hardware`。
+> - 人设中文化（小灯）；保持 `livekit-agents==1.2.9` 版本锁不变；硬件依赖移入 `pyproject` 的可选 `hardware`。
 > - 新增 `tools/smoke_doubao.py`：不开麦的连接/首音延迟冒烟。
 
-本仓库是「小灯」——把上游 [LeLamp](https://github.com/humancomputerlab/LeLamp)（基于 [Apple Elegnt](https://machinelearning.apple.com/research/elegnt-expressive-functional-movement) 的开源机器人台灯，由 [Human Computer Lab](https://www.humancomputerlab.com/) 开发）复现为**中文豆包端到端实时语音版**的运行时代码。提供电机控制、动作录制/回放、实时语音对话、RGB 灯光与硬件自检能力。
+本仓库是「小灯」——把上游 [LeLamp](https://github.com/humancomputerlab/LeLamp)（基于 [Apple Elegnt](https://machinelearning.apple.com/research/elegnt-expressive-functional-movement) 的开源机器人台灯，由 [Human Computer Lab](https://www.humancomputerlab.com/) 开发）复现为**中文豆包三段式语音版**的运行时代码。提供电机控制、动作录制/回放、语音对话（工具可用）、RGB 灯光与硬件自检能力。
 
 ## 系统架构
 
 > 📐 **完整架构文档见 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)** —— 整体架构、交互范式、模块清单、运行时能力、与上游差异、关键认知。
 
-一句话定位：**这不是「机器人」，而是给台灯套了一个能自主调动作和灯光的实时语音 Agent**。代码本身只负责「硬件抽象 + 把硬件暴露成 LLM 工具」，对话智能完全来自外部实时语音大模型（上游 OpenAI Realtime → 本仓库豆包 / volcengine Realtime）。
+一句话定位：**这不是「机器人」，而是给台灯套了一个能自主调动作和灯光的语音 Agent**。代码本身只负责「硬件抽象 + 把硬件暴露成 LLM 工具」，对话智能来自外部语音大模型（上游 OpenAI Realtime → 本仓库火山豆包三段式 STT+LLM+TTS）。
 
 ```
                   main.py  (LiveKit Agent 入口)
                        │
         ┌──────────────┴───────────────┐
-   语音大脑(豆包 Realtime)          硬件控制(@function_tool)
+ 语音大脑(STT+LLM+TTS 三段式)      硬件控制(@function_tool)
    常开麦 / 服务端 VAD / 说话           │
                        ┌───────────┼────────────┐
                   MotorsService  RGBService   set_volume(amixer)
@@ -287,25 +287,21 @@ Sample apps to test LeLamp's capabilities.
 
 ### LiveKit Voice Agent
 
-本 fork 支持两种语音模式，用环境变量 `LELAMP_VOICE_MODE` 切换（默认 `realtime`）：
+本 fork 用 **STT + LLM + TTS 三段式**，全程走火山**新版统一 API**，工具调用可用（能驱动动作/灯光）：
 
-| 模式 | 听/想/说 | 工具调用 | 适用 |
-|---|---|---|---|
-| `realtime`（默认） | 豆包端到端实时语音（`volcengine.RealtimeModel`） | ❌ 不支持（纯对话体验） | 日常对话、演示 |
-| `cascaded` | STT + LLM + TTS 三段式 | ✅ 支持（能调动作/灯光） | 测试：工具调用稳、每段延迟可单独量、组件可换 |
+| 环节 | 用什么 | 说明 |
+|---|---|---|
+| STT | `lelamp/voice/volc_v3`（自写） | 火山新版 v3「单 X-Api-Key」，seedasr 2.0，自带服务端 VAD 断句 |
+| LLM | 方舟 Ark chat（OpenAI 兼容） | 新版 API，支持 `function_tool` 工具调用 |
+| TTS | `lelamp/voice/volc_v3`（自写） | 火山新版 v3「单 X-Api-Key」，按音色自动选 resource_id |
 
-> 三段式的 STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（火山新版 v3「单 X-Api-Key」，
-> 自包含协议，不依赖旧 volcengine 插件的 STT/TTS）。它对应 livekit-agents 1.5.x 写成，
-> 但实测在本仓库锁定的 **1.2.9** 上原样可用——**故本仓库不改 livekit 版本**。
+> `volc_v3` 是**本仓库自写插件**（自包含 WS/HTTP 协议，移植自 voice_test），不依赖旧 volcengine 插件的 STT/TTS。
+> 它对应 livekit-agents 1.5.x 写成，但实测在本仓库锁定的 **1.2.9** 上原样可用——**故本仓库不改 livekit 版本**。
+> 旧的 `volcengine.RealtimeModel`（端到端实时、旧 API、不支持工具）已**弃用移除**。
 
 console 本地模式直连麦克风/扬声器，**不需要** LiveKit 云端密钥。在仓库根目录建 `.env`：
 
 ```bash
-# ---- realtime 模式（默认）：豆包端到端实时语音 ----
-VOLCENGINE_APP_ID=                 # 也可用 VOLCENGINE_REALTIME_APP_ID
-VOLCENGINE_REALTIME_ACCESS_TOKEN=
-
-# ---- cascaded 模式（三段式）----
 VOLCENGINE_VOICE_API_KEY=          # STT/TTS 共用：火山新版 v3 单 X-Api-Key（volc_v3 用）
 VOLCENGINE_LLM_API_KEY=            # LLM：Ark/方舟 的 LLM key（与语音 key 是两套，不可混用）
 # 可选：VOLCENGINE_LLM_MODEL（默认 doubao-1-5-lite-32k-250115）/ LAMP_SPEAKER（默认 jupiter 女声）
@@ -314,19 +310,14 @@ VOLCENGINE_LLM_API_KEY=            # LLM：Ark/方舟 的 LLM key（与语音 ke
 运行：
 
 ```bash
-# realtime（默认）
 sudo uv run main.py console
-
-# cascaded（三段式，工具可用）
-LELAMP_VOICE_MODE=cascaded sudo uv run main.py console
 
 # 平滑动画模式
 sudo uv run smooth_animation.py console
 ```
 
 无硬件（PC 上纯语音复现）时设 `LELAMP_NO_HARDWARE=1`，电机/灯光降级为 mock 只打日志。
-连接/首音延迟冒烟（不开麦）：`uv run tools/smoke_doubao.py`。
-cascaded 想要更稳的断句/打断，可装 `livekit-plugins-silero`（装了自动启用 VAD，否则靠 volc_v3.STT 自带 VAD）。
+想要更稳的断句/打断，可装 `livekit-plugins-silero`（装了自动启用 VAD，否则靠 volc_v3.STT 自带 VAD）。
 
 In case your lamp is not `lelamp`, change the id of the lamp inside main.py:
 
