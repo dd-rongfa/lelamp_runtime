@@ -11,7 +11,7 @@ from livekit.agents import (
 )
 import logging
 import os
-from livekit.plugins import volcengine
+from livekit.plugins import openai
 from typing import Union
 from lelamp.service.motors.motors_service import MotorsService
 from lelamp.service.rgb.rgb_service import RGBService
@@ -247,9 +247,12 @@ def _build_session() -> AgentSession:
     speaker = os.getenv("LAMP_SPEAKER", "zh_female_vv_jupiter_bigtts")
 
     stt = volc_v3.STT(api_key=voice_key)
-    llm = volcengine.LLM(
-        model=os.getenv("VOLCENGINE_LLM_MODEL", "doubao-1-5-lite-32k-250115"),
-        # api_key 缺省读 VOLCENGINE_LLM_API_KEY（Ark/方舟 的 LLM key，与语音 key 是两套）
+    # LLM 用 openai 插件接方舟 Ark（OpenAI 兼容，新版 chat API，支持 function_tool）。
+    # 与原版 livekit-agents[openai] 一致；换 DeepSeek 等其它 OpenAI 兼容端点只需改 base_url/key。
+    llm = openai.LLM(
+        model=os.getenv("LLM_MODEL", "doubao-1-5-lite-32k-250115"),
+        base_url=os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/"),
+        api_key=os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY"),
     )
     tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
 

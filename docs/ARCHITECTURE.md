@@ -92,7 +92,7 @@ STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（自包含 WS/HTTP 
 | `lelamp/recordings/*.csv` | 10 段预录动作：curious / excited / happy_wiggle / headshake / nod / sad / scanning / shock / shy / wake_up |
 | `lelamp/test/` | `test_audio` / `test_motors` / `test_rgb` 硬件自检 |
 | `tools/smoke_doubao.py` | 豆包语音冒烟测试（本仓库新增） |
-| `pyproject.toml` | 依赖（livekit-agents、lerobot、volcengine 插件等） |
+| `pyproject.toml` | 依赖（`livekit-agents[openai]`、lerobot 等；已移除 volcengine 插件） |
 
 ## 4. 运行时能力清单
 
