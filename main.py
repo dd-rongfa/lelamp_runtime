@@ -1,3 +1,13 @@
+import sys
+
+# Windows 中文控制台默认 GBK，livekit console 模式会打印 emoji（🚀 等），
+# GBK 编不出 → 启动即崩。强制 stdout/stderr 走 UTF-8，跨平台都安全。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from dotenv import load_dotenv
 import argparse
 import base64
