@@ -40,6 +40,37 @@
 - 动作是「死」的，只能回放固定 10 段 CSV，想要新表情得离线 `record.py` 重录。
 - 交互是**常开免唤醒**：进程启动即常驻开麦，靠服务端 VAD 判断说话，无关键词唤醒。
 
+## 快速开始（无硬件，Windows / macOS / Ubuntu 都行）
+
+不需要树莓派、不需要机械臂，一台带麦克风的电脑就能跑通**语音 + 视觉 + 工具调用**。
+
+```bash
+# 1. 装 uv（https://docs.astral.sh/uv/），然后：
+git clone https://github.com/dd-rongfa/lelamp_runtime.git
+cd lelamp_runtime
+uv sync                      # 只装语音那套轻依赖，不碰硬件库
+
+# 2. 配凭据（需要你自己的火山豆包 key，见 .env.example 注释里怎么拿）
+cp .env.example .env         # Windows PowerShell: copy .env.example .env
+#   填 VOLCENGINE_VOICE_API_KEY（语音）和 LLM_API_KEY（方舟 Ark）两把 key
+
+# 3. 跑（要麦克风/扬声器；.env 里已默认 LELAMP_NO_HARDWARE=1 走 mock）
+uv run main.py console
+```
+
+跑起来后对小灯说话即可。试试：
+- 「你好呀」→ 它会用中文搭话（顺带 mock 一个动作/灯光，日志里能看到）
+- 「**你看看这是啥？**」→ 它调 `look` 看 `assets/images/1_lamp_3d.png`（仓库自带）并吐槽
+- 「**开心地点个头**」→ 它调 `play_recording`（mock 模式只打日志，真机才会动）
+
+**不想接麦克风、只想验证三段式通不通**（连通性 + 各段延迟）：
+```bash
+uv run tools/smoke_doubao.py     # 不开麦，逐段测 STT/LLM/TTS，打印 PASS/FAIL + 延迟
+```
+
+> 真树莓派 / LeLamp 真机部署（让机械臂和灯真的动）见下方 [Installation](#installation) 与 [开机自启](#4-start-upon-boot)，
+> 需要 `uv sync --extra hardware` + 舵机标定；ARM 上 lerobot/torch 体积大、装得慢，留足时间。
+
 ## 目录结构
 
 ```
