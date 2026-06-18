@@ -76,13 +76,17 @@ def _capture_frame() -> "tuple[Union[str, None], Union[str, None]]":
 
 
 async def _vision_describe(data_url: str) -> str:
-    """用全模态豆包客观描述一张图（关思考求快）。"""
+    """用**专用视觉模型**客观描述一张图（关思考求快）。
+
+    VISION_MODEL 独立于聊天大脑 LLM_MODEL：默认 doubao-seed-2-0-mini（互动看图，快），
+    要更准（如看作业）可设成 doubao-seed-2-0-pro。key/base_url 缺省复用 LLM 那套（同一把 Ark key）。
+    """
     client = openai_sdk.AsyncClient(
-        api_key=os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY"),
-        base_url=os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/"),
+        api_key=os.getenv("VISION_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY"),
+        base_url=os.getenv("VISION_BASE_URL") or os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/"),
     )
     resp = await client.chat.completions.create(
-        model=os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428"),
+        model=os.getenv("VISION_MODEL", "doubao-seed-2-0-mini-260428"),
         messages=[{"role": "user", "content": [
             {"type": "text", "text": "用一两句中文客观描述这张图里有什么，简短。"},
             {"type": "image_url", "image_url": {"url": data_url}},
