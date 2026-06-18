@@ -26,6 +26,7 @@ import time
 import aiohttp
 from dotenv import load_dotenv
 
+import openai as openai_sdk  # 官方 OpenAI SDK：豆包全系列吃 OpenAI 格式
 from livekit import rtc
 from livekit.agents import APIConnectOptions
 from livekit.agents import llm as livekit_llm
@@ -59,7 +60,8 @@ async def smoke_llm() -> bool | None:
         return None
     model = os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428")  # Doubao-Seed-2.0-lite 全模态
     base_url = os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/")
-    brain = openai.LLM(model=model, base_url=base_url, api_key=key)
+    client = openai_sdk.AsyncClient(api_key=key, base_url=base_url)  # 官方 SDK 客户端
+    brain = openai.LLM(model=model, client=client)
     # 豆包 Seed 默认开「思考」，TTFT 7~12s；关掉降到 ~1s。冒烟按实际用法关思考。
     extra = {}
     if "doubao" in model.lower() or "volces" in base_url:

@@ -11,6 +11,7 @@ from livekit.agents import (
 )
 import logging
 import os
+import openai as openai_sdk  # 官方 OpenAI SDK：豆包全系列支持 OpenAI 格式，直接拿它建客户端
 from livekit.plugins import openai
 from livekit.agents.types import NOT_GIVEN
 from typing import Union
@@ -276,12 +277,14 @@ def _build_session() -> AgentSession:
     model = os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428")
     base_url = os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/")
     api_key = os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY")
-    # 豆包/方舟用 ArkLLM 关思考（救 TTFT）；其它端点（如 DeepSeek）用原生 openai.LLM。
+    # 豆包全系列支持 OpenAI 格式：用官方 openai SDK 直接建 AsyncClient 指向方舟端点，
+    # 再交给 livekit 的 LLM 节点（AgentSession 需要这层壳）。换任意豆包/兼容模型只改 LLM_MODEL/LLM_BASE_URL。
+    client = openai_sdk.AsyncClient(api_key=api_key, base_url=base_url)
     if "doubao" in model.lower() or "volces" in base_url:
-        llm = ArkLLM(model=model, base_url=base_url, api_key=api_key,
-                     thinking=os.getenv("LLM_THINKING", "disabled"))
+        # 豆包 Seed 默认开思考(TTFT 7~12s)，ArkLLM 注入 thinking=disabled 救回 ~1s。
+        llm = ArkLLM(model=model, client=client, thinking=os.getenv("LLM_THINKING", "disabled"))
     else:
-        llm = openai.LLM(model=model, base_url=base_url, api_key=api_key)
+        llm = openai.LLM(model=model, client=client)
     tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
 
     # 可选 silero VAD：装了就用（更稳的断句/打断）；没装就靠 volc_v3.STT 自带 VAD 断句。

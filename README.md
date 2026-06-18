@@ -292,7 +292,7 @@ Sample apps to test LeLamp's capabilities.
 | 环节 | 用什么 | 说明 |
 |---|---|---|
 | STT | `lelamp/voice/volc_v3`（自写） | 火山新版 v3「单 X-Api-Key」，seedasr 2.0，自带服务端 VAD 断句 |
-| LLM | `openai` 插件接方舟 Ark（默认 Doubao-Seed-2.0-lite **全模态**） | 即原版 `livekit-agents[openai]`；支持 `function_tool`；全模态=聊天+看图一颗脑；换 DeepSeek 等只改 `LLM_BASE_URL` |
+| LLM | 官方 **openai SDK** 接方舟 Ark（默认 Doubao-Seed-2.0-lite **全模态**） | 豆包全系列吃 OpenAI 格式，`AsyncClient` 直连；支持 `function_tool`；全模态=聊天+看图一颗脑；换 DeepSeek 等只改 `LLM_BASE_URL` |
 | TTS | `lelamp/voice/volc_v3`（自写） | 火山新版 v3「单 X-Api-Key」，按音色自动选 resource_id |
 
 > `volc_v3` 是**本仓库自写插件**（自包含 WS/HTTP 协议，移植自 voice_test），不依赖旧 volcengine 插件的 STT/TTS。
