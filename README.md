@@ -317,7 +317,7 @@ sudo uv run smooth_animation.py console
 ```
 
 无硬件（PC 上纯语音复现）时设 `LELAMP_NO_HARDWARE=1`，电机/灯光降级为 mock 只打日志。
-想要更稳的断句/打断，可装 `livekit-plugins-silero`（装了自动启用 VAD，否则靠 volc_v3.STT 自带 VAD）。
+断句/打断用本地 **silero VAD**（已是基础依赖，`uv sync` 自动装）——比纯靠 STT 服务端 VAD 跟手得多。
 
 In case your lamp is not `lelamp`, change the id of the lamp inside main.py:
 

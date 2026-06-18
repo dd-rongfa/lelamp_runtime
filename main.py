@@ -331,7 +331,7 @@ def _build_session() -> AgentSession:
 
     语音 I/O 用本仓库自写插件 lelamp.voice.volc_v3（火山新版 v3「单 X-Api-Key」统一接口，
     自包含 WS/HTTP 协议，不依赖旧 volcengine 插件的 STT/TTS；已在 livekit-agents 1.2.9 实测可构造）。
-    - STT：volc_v3.STT（seedasr 2.0，自带服务端 VAD 断句，无需 silero）。
+    - STT：volc_v3.STT（seedasr 2.0）；断句用本地 silero VAD（基础依赖，跟手）。
     - LLM：方舟 Ark chat（OpenAI 兼容，新版 API），function_tool 工具调用可用。
     - TTS：volc_v3.TTS（按音色自动选 resource_id）。
     人设走 Agent.instructions（已在 LeLamp 里设），LLM 自动吃；开场用 generate_reply 真合成。
@@ -364,7 +364,8 @@ def _build_session() -> AgentSession:
         llm = openai.LLM(model=model, client=client)
     tts = volc_v3.TTS(api_key=voice_key, speaker=speaker)
 
-    # 可选 silero VAD：装了就用（更稳的断句/打断）；没装就靠 volc_v3.STT 自带 VAD 断句。
+    # 本地 silero VAD 做断句/打断（基础依赖，比 STT 服务端 VAD 跟手得多，是对话不卡的关键）。
+    # 留 try 兜底：万一模型下载失败也别崩，退回服务端 VAD。
     vad = None
     try:
         from livekit.plugins import silero

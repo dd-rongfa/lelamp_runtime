@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 # 电机/LED 等硬件依赖（lerobot/feetech/rpi）挪到 optional，避免无硬件环境安装。
 dependencies = [
     "livekit-agents[openai]==1.2.9",
+    "livekit-plugins-silero",          # 本地 VAD 断句（基础能力，决定对话跟手度），不是可选
     "numpy>=2.2.6",
     "python-dotenv",
     "sounddevice>=0.5.2",

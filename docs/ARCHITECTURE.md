@@ -45,7 +45,7 @@ STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（自包含 WS/HTTP 
 ——因为豆包协议与 livekit 版本无关，插件只是把协议包成 `stt.STT`/`tts.TTS` 基类，而这些基类在 1.2.9 已具备。
 **故本仓库不改版本锁，零依赖升级风险。**
 
-断句默认用 `volc_v3.STT` 自带服务端 VAD；装了 `livekit-plugins-silero` 则自动接 `vad=` 更稳。
+断句/打断用本地 **silero VAD**（`livekit-plugins-silero`，已列为基础依赖）——本地端点比 STT 服务端 VAD 跟手，是对话不卡的关键；模型下载失败时兜底退回服务端 VAD。
 
 > **已弃用移除**：旧的 `volcengine.RealtimeModel`（豆包端到端实时，旧 API、`generate_reply` 空壳、不支持工具调用）。
 > 当前只保留新版统一 API 的三段式通路。
