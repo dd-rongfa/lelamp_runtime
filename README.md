@@ -306,6 +306,7 @@ VOLCENGINE_VOICE_API_KEY=          # STT/TTS 共用：火山新版 v3 单 X-Api-
 LLM_API_KEY=                       # LLM：方舟 Ark 的 LLM key（与语音 key 两套，不可混用；旧名 VOLCENGINE_LLM_API_KEY 仍兼容）
 # 可选：LLM_MODEL（默认 doubao-seed-2-0-lite-260428，Doubao-Seed-2.0-lite 全模态）/ LLM_BASE_URL（默认 Ark；换 DeepSeek 等改这里）
 # 可选：LLM_THINKING（默认 disabled；豆包 Seed 默认开思考会让 TTFT 飙到 7~12s，关掉降到 ~1s，语音必关）/ LAMP_SPEAKER（默认 uranus 女声 Vivi 2.0）
+# 可选（视觉）：LAMP_VISION_IMAGE（指一张图，小灯 look 时用它；无摄像头也能验证视觉）/ LAMP_CAMERA_INDEX（cv2 摄像头序号，默认 0）
 ```
 
 运行：

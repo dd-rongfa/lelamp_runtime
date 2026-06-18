@@ -99,10 +99,11 @@ STT/TTS 用**本仓库自写插件 `lelamp/voice/volc_v3`**（自包含 WS/HTTP 
 对话期间由大模型自主调用的 `@function_tool`：
 
 1. **语音对话** —— STT + LLM + TTS 三段式（火山豆包新版统一 API）
-2. `play_recording` —— 播放 10 段预录肢体动作之一
-3. `set_rgb_solid` —— 设灯纯色
-4. `paint_rgb_pattern` —— 画灯图案（40 色，8×5 网格）
-5. `set_volume` —— 调系统音量（amixer）
+2. `look` —— **看一眼**：抓一帧（`LAMP_VISION_IMAGE` 固定图兜底 / 摄像头 cv2）→ 全模态豆包描述 → 小灯转述。本仓库相对上游的新增能力（上游无视觉）
+3. `play_recording` —— 播放 10 段预录肢体动作之一
+4. `set_rgb_solid` —— 设灯纯色
+5. `paint_rgb_pattern` —— 画灯图案（40 色，8×5 网格）
+6. `set_volume` —— 调系统音量（amixer）
 
 开发期命令行能力（不在对话内）：录制新动作、回放、舵机标定、列动作、硬件自检、安全关机。
 

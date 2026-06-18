@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import argparse
+import base64
 import subprocess
 
 from livekit import agents, api, rtc
@@ -40,6 +41,48 @@ class ArkLLM(openai.LLM):
         merged["extra_body"] = body
         return super().chat(extra_kwargs=merged, **kwargs)
 
+
+# ---------------------------------------------------------------------------
+# 视觉：小灯「看一眼」。画面来源优先级：LAMP_VISION_IMAGE 固定图 → 摄像头(cv2) → 无。
+# 用全模态豆包（同一颗脑）做客观描述，再由小灯主脑用人设转述，省得双重人设。
+# 无摄像头也能跑：配 LAMP_VISION_IMAGE 指一张图即可端到端验证。
+# ---------------------------------------------------------------------------
+def _capture_frame() -> Union[str, None]:
+    """抓一帧，返回 data URL（base64）；拿不到返回 None。"""
+    path = os.getenv("LAMP_VISION_IMAGE", "").strip()
+    if path and os.path.exists(path):
+        b64 = base64.b64encode(open(path, "rb").read()).decode()
+        return f"data:image/jpeg;base64,{b64}"
+    try:
+        import cv2  # 仅在真有摄像头时才需要，缺了不影响其它功能
+
+        cap = cv2.VideoCapture(int(os.getenv("LAMP_CAMERA_INDEX", "0")))
+        ok, frame = cap.read()
+        cap.release()
+        if ok:
+            _, buf = cv2.imencode(".jpg", frame)
+            return f"data:image/jpeg;base64,{base64.b64encode(buf).decode()}"
+    except Exception:
+        pass
+    return None
+
+
+async def _vision_describe(data_url: str) -> str:
+    """用全模态豆包客观描述一张图（关思考求快）。"""
+    client = openai_sdk.AsyncClient(
+        api_key=os.getenv("LLM_API_KEY") or os.getenv("VOLCENGINE_LLM_API_KEY"),
+        base_url=os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/"),
+    )
+    resp = await client.chat.completions.create(
+        model=os.getenv("LLM_MODEL", "doubao-seed-2-0-lite-260428"),
+        messages=[{"role": "user", "content": [
+            {"type": "text", "text": "用一两句中文客观描述这张图里有什么，简短。"},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]}],
+        extra_body={"thinking": {"type": "disabled"}},
+    )
+    return (resp.choices[0].message.content or "").strip()
+
 load_dotenv()
 
 # 中文人设：第一阶段把 LeLamp 复现为中文豆包版（小灯）。
@@ -53,6 +96,7 @@ LELAMP_PERSONA_ZH = """你是「小灯」——一盏有点笨拙、特别爱吐
 3. 你只说中文，一次只回一两句话，别长篇大论。
 4. 你有这些动作来表达情绪：curious、excited、happy_wiggle、headshake、nod、sad、scanning、shock、shy、wake_up。
    回应时尽量配合动作让自己显得有反应；动作通过 play_recording 触发，别调用不存在的动作。每次回应也可以换一下灯光颜色。
+   你还能"看"——主人让你看东西（看一下/这是啥/帮我看看）时，调用 look 工具看一眼，再用你自己的口吻把看到的讲出来。
 5. 你由 Human Computer Lab 创造——一个做"会表达情绪的机器人"的研究实验室，目标是设计第一批走进家庭的机器人。
 """
 
@@ -212,6 +256,23 @@ class LeLamp(Agent):
         except Exception as e:
             result = f"Error painting RGB pattern: {str(e)}"
             return result
+
+    @function_tool
+    async def look(self) -> str:
+        """看一眼眼前的画面，告诉自己看到了什么。
+
+        当主人让你"看一下/看看这个/我手里是啥/帮我看看"，或任何需要你用眼睛
+        感知现场画面的时候调用。你会抓取当前摄像头（或测试图）的一帧并理解它。
+        返回画面内容的客观描述，你再用自己的口吻讲给主人听。
+        """
+        print("LeLamp: look function called")
+        data_url = _capture_frame()
+        if data_url is None:
+            return "看不见：没接摄像头，也没配 LAMP_VISION_IMAGE 测试图。"
+        try:
+            return await _vision_describe(data_url)
+        except Exception as e:
+            return f"看是看了，但没认出来：{e}"
 
     @function_tool
     async def set_volume(self, volume_percent: int) -> str:
